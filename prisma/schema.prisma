@@ -1,0 +1,114 @@
+// schema.prisma
+datasource db {
+  provider = "sqlserver"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["microsoftSqlServer"]
+}
+
+model User {
+  id             Int               @id @default(autoincrement())
+  username       String            @unique
+  passwordHash   String
+  role           String            @default("USER")
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  deletedAt      DateTime?
+  assignments    ProductAssignment[]
+
+  @@map("users")
+}
+
+model Branch {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  products  Product[]
+  employees Employee[]
+
+  @@map("branches")
+}
+
+model Category {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  products    Product[]
+
+  @@map("categories")
+}
+
+model Employee {
+  id           Int               @id @default(autoincrement())
+  empId        String            @unique
+  name         String
+  email        String?
+  department   String?
+  position     String?
+  branchId     Int?
+  branch       Branch?           @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  deletedAt    DateTime?
+  assignments  ProductAssignment[]
+
+  @@map("employees")
+}
+
+model Product {
+  id             Int               @id @default(autoincrement())
+  name           String
+  model          String
+  categoryId     Int
+  category       Category          @relation(fields: [categoryId], references: [id])
+  branchId       Int
+  branch         Branch            @relation(fields: [branchId], references: [id])
+  departmentId   Int?
+  department     Department?       @relation(fields: [departmentId], references: [id])
+  warrantyDate   DateTime?
+  complianceStatus Boolean          @default(false)
+  notes          String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  deletedAt      DateTime?
+  assignments    ProductAssignment[]
+
+  @@map("products")
+}
+model ProductAssignment {
+  id               Int             @id @default(autoincrement())
+  productId        Int
+  product          Product         @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  employeeId       Int
+  employee         Employee        @relation(fields: [employeeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assignedById     Int
+  assignedBy       User            @relation(fields: [assignedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assignedAt       DateTime        @default(now())
+  returnedAt       DateTime?
+  expectedReturnAt DateTime?
+  status           String          @default("ASSIGNED")
+  condition        String?
+  notes            String?
+  deletedAt        DateTime?       @map("deleted_at")  
+  @@map("product_assignments")
+}
+
+model Department {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  products    Product[]
+
+  @@map("departments")
+}
