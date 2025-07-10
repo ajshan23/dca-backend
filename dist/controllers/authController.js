@@ -33,7 +33,7 @@ async function login(req, res) {
         if (!isMatch) {
             throw new errorHandler_1.AppError("Invalid credentials", 401);
         }
-        const token = jsonwebtoken_1.default.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET || "your-secret-your_secure_jwt_secret_32chars_min", { expiresIn: "1d" });
+        const token = jsonwebtoken_1.default.sign({ userId: user.id, role: user.role }, process.env.JWT_SECRET || "your-secret-your_secure_jwt_secret_32chars_min", { expiresIn: "1d" });
         res.json({
             success: true,
             data: {
