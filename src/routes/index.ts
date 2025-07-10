@@ -9,7 +9,7 @@ import branchRoutes from "./branchRoutes";
 import dashboardRoutes from "./dashboardRoutes";
 import departmentRoutes from "./departmentRoutes"; 
 
-import {  updateSuperAdminRole } from "../database/seed";
+import {  main, updateSuperAdminRole } from "../database/seed";
 
 const router = express.Router();
 
@@ -17,8 +17,12 @@ const router = express.Router();
 router.get("/health", (_req, res) => {
   res.status(200).json({ status: "OK", timestamp: new Date() });
 });
-router.get("/seed", (_req, res) => {
+router.get("/up/seed", (_req, res) => {
   updateSuperAdminRole();
+  res.status(200).json({ status: "OK", timestamp: new Date() });
+});
+router.get("/seed", (_req, res) => {
+  main();
   res.status(200).json({ status: "OK", timestamp: new Date() });
 });
 

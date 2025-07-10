@@ -4,7 +4,7 @@ import prisma from './prisma';
 
 
 export async function main() {
-  const superadminEmail = 'superadmin@example.com';
+  const superadminEmail = 'superadmin';
   const superadminPassword = 'SuperAdmin@1234';
   
   // Hash the password
