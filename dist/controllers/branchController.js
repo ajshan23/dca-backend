@@ -9,7 +9,7 @@ exports.getBranchById = getBranchById;
 exports.updateBranch = updateBranch;
 exports.deleteBranch = deleteBranch;
 const errorHandler_1 = require("../utils/errorHandler");
-const prisma_1 = __importDefault(require("@/database/prisma"));
+const prisma_1 = __importDefault(require("../database/prisma"));
 async function createBranch(req, res) {
     try {
         const { name } = req.body;

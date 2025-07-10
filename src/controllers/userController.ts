@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { AppError } from "../utils/errorHandler";
 import bcrypt from "bcryptjs";
-import prisma from "@/database/prisma";
+import prisma from "../database/prisma";
 
 
 const BCRYPT_SALT_ROUNDS = 12;

@@ -10,7 +10,7 @@ import {
 } from "../controllers/userController";
 import { authenticateJWT } from "../middlewares/authMiddleware";
 import { authorizeRoles } from "../middlewares/roleMiddleware";
-import { UserRole } from "@/constants/roles";
+import { UserRole } from "../constants/roles";
 
 const router = express.Router();
 

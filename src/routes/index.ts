@@ -9,7 +9,7 @@ import branchRoutes from "./branchRoutes";
 import dashboardRoutes from "./dashboardRoutes";
 import departmentRoutes from "./departmentRoutes"; 
 
-import {  updateSuperAdminRole } from "@/database/seed";
+import {  updateSuperAdminRole } from "../database/seed";
 
 const router = express.Router();
 

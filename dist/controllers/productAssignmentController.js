@@ -12,7 +12,7 @@ exports.updateAssignment = updateAssignment;
 exports.bulkAssignProducts = bulkAssignProducts;
 exports.getProductAssignments = getProductAssignments;
 const errorHandler_1 = require("../utils/errorHandler");
-const prisma_1 = __importDefault(require("@/database/prisma"));
+const prisma_1 = __importDefault(require("../database/prisma"));
 const client_1 = require("@prisma/client");
 async function assignProduct(req, res) {
     const { productId, employeeId, expectedReturnAt, notes } = req.body;

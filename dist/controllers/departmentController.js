@@ -9,7 +9,7 @@ exports.getDepartmentById = getDepartmentById;
 exports.updateDepartment = updateDepartment;
 exports.deleteDepartment = deleteDepartment;
 const errorHandler_1 = require("../utils/errorHandler");
-const prisma_1 = __importDefault(require("@/database/prisma"));
+const prisma_1 = __importDefault(require("../database/prisma"));
 async function createDepartment(req, res) {
     try {
         const { name, description } = req.body;

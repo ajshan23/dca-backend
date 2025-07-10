@@ -7,7 +7,7 @@ const express_1 = __importDefault(require("express"));
 const userController_1 = require("../controllers/userController");
 const authMiddleware_1 = require("../middlewares/authMiddleware");
 const roleMiddleware_1 = require("../middlewares/roleMiddleware");
-const roles_1 = require("@/constants/roles");
+const roles_1 = require("../constants/roles");
 const router = express_1.default.Router();
 router.get("/me", authMiddleware_1.authenticateJWT, userController_1.getCurrentUser);
 router.get("/check-username", userController_1.checkUsernameAvailability);

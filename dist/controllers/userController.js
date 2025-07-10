@@ -12,7 +12,7 @@ exports.deleteUser = deleteUser;
 exports.checkUsernameAvailability = checkUsernameAvailability;
 const errorHandler_1 = require("../utils/errorHandler");
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
-const prisma_1 = __importDefault(require("@/database/prisma"));
+const prisma_1 = __importDefault(require("../database/prisma"));
 const BCRYPT_SALT_ROUNDS = 12;
 async function getAllUsers(_req, res) {
     try {

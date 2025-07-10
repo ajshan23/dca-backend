@@ -11,7 +11,7 @@ exports.getProductById = getProductById;
 exports.updateProduct = updateProduct;
 exports.deleteProduct = deleteProduct;
 const errorHandler_1 = require("../utils/errorHandler");
-const prisma_1 = __importDefault(require("@/database/prisma"));
+const prisma_1 = __importDefault(require("../database/prisma"));
 const client_1 = require("@prisma/client");
 const qrcode_1 = __importDefault(require("qrcode"));
 async function createProduct(req, res) {

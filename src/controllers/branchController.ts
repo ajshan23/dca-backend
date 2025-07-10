@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { AppError } from "../utils/errorHandler";
-import prisma from "@/database/prisma";
+import prisma from "../database/prisma";
 
 
 

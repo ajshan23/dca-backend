@@ -9,7 +9,7 @@ exports.getCategoryById = getCategoryById;
 exports.updateCategory = updateCategory;
 exports.deleteCategory = deleteCategory;
 const errorHandler_1 = require("../utils/errorHandler");
-const prisma_1 = __importDefault(require("@/database/prisma"));
+const prisma_1 = __importDefault(require("../database/prisma"));
 async function createCategory(req, res) {
     try {
         const { name, description } = req.body;

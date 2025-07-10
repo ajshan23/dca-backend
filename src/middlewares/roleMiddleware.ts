@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { AppError } from "../utils/errorHandler";
-import { UserRole } from "@/constants/roles";
+import { UserRole } from "../constants/roles";
 
 
 export function authorizeRoles(...roles: UserRole[]) {

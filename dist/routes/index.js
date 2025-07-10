@@ -13,7 +13,7 @@ const categoryRoutes_1 = __importDefault(require("./categoryRoutes"));
 const branchRoutes_1 = __importDefault(require("./branchRoutes"));
 const dashboardRoutes_1 = __importDefault(require("./dashboardRoutes"));
 const departmentRoutes_1 = __importDefault(require("./departmentRoutes"));
-const seed_1 = require("@/database/seed");
+const seed_1 = require("../database/seed");
 const router = express_1.default.Router();
 router.get("/health", (_req, res) => {
     res.status(200).json({ status: "OK", timestamp: new Date() });
