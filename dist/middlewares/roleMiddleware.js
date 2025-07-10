@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.authorizeRoles = authorizeRoles;
-const errorHandler_1 = require("../utils/errorHandler");
+const errorHandler_1 = require("../samples/errorHandler");
 function authorizeRoles(...roles) {
     return (req, _res, next) => {
         if (!req.user) {

@@ -11,7 +11,7 @@ import {
 } from "../controllers/productController";
 import { authorizeRoles } from "../middlewares/roleMiddleware";
 import { authenticateJWT } from "../middlewares/authMiddleware";
-import { UserRole } from "../constants/roles";
+import { UserRole } from "../constant/roles";
 
 const router = express.Router();
 

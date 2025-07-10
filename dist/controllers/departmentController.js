@@ -8,18 +8,18 @@ exports.getAllDepartments = getAllDepartments;
 exports.getDepartmentById = getDepartmentById;
 exports.updateDepartment = updateDepartment;
 exports.deleteDepartment = deleteDepartment;
-const errorHandler_1 = require("../utils/errorHandler");
-const prisma_1 = __importDefault(require("../database/prisma"));
+const errorHandler_1 = require("../samples/errorHandler");
+const db_1 = __importDefault(require("../database/db"));
 async function createDepartment(req, res) {
     try {
         const { name, description } = req.body;
-        const existingDepartment = await prisma_1.default.department.findFirst({
+        const existingDepartment = await db_1.default.department.findFirst({
             where: { name, deletedAt: null }
         });
         if (existingDepartment) {
             throw new errorHandler_1.AppError("Department name is already taken", 409);
         }
-        const department = await prisma_1.default.department.create({
+        const department = await db_1.default.department.create({
             data: { name, description }
         });
         res.status(201).json({ success: true, data: department });
@@ -30,7 +30,7 @@ async function createDepartment(req, res) {
 }
 async function getAllDepartments(_req, res) {
     try {
-        const departments = await prisma_1.default.department.findMany({
+        const departments = await db_1.default.department.findMany({
             where: { deletedAt: null }
         });
         res.json({ success: true, data: departments });
@@ -41,7 +41,7 @@ async function getAllDepartments(_req, res) {
 }
 async function getDepartmentById(req, res) {
     try {
-        const department = await prisma_1.default.department.findFirst({
+        const department = await db_1.default.department.findFirst({
             where: { id: parseInt(req.params.id), deletedAt: null }
         });
         if (!department)
@@ -56,14 +56,14 @@ async function updateDepartment(req, res) {
     try {
         const { id } = req.params;
         const { name, description } = req.body;
-        const department = await prisma_1.default.department.findFirst({
+        const department = await db_1.default.department.findFirst({
             where: { id: parseInt(id), deletedAt: null }
         });
         if (!department)
             throw new errorHandler_1.AppError("Department not found", 404);
         const updateData = {};
         if (name && name !== department.name) {
-            const existingDepartment = await prisma_1.default.department.findFirst({
+            const existingDepartment = await db_1.default.department.findFirst({
                 where: { name, deletedAt: null }
             });
             if (existingDepartment) {
@@ -74,7 +74,7 @@ async function updateDepartment(req, res) {
         if (description) {
             updateData.description = description;
         }
-        const updatedDepartment = await prisma_1.default.department.update({
+        const updatedDepartment = await db_1.default.department.update({
             where: { id: parseInt(id) },
             data: updateData
         });
@@ -87,18 +87,20 @@ async function updateDepartment(req, res) {
 async function deleteDepartment(req, res) {
     try {
         const { id } = req.params;
-        const department = await prisma_1.default.department.findFirst({
+        const department = await db_1.default.department.findFirst({
             where: { id: parseInt(id), deletedAt: null }
         });
         if (!department)
             throw new errorHandler_1.AppError("Department not found", 404);
-        const productsCount = await prisma_1.default.product.count({
+        // Check if department has products
+        const productsCount = await db_1.default.product.count({
             where: { departmentId: parseInt(id), deletedAt: null }
         });
         if (productsCount > 0) {
             throw new errorHandler_1.AppError("Cannot delete department with associated products ", 400);
         }
-        await prisma_1.default.department.update({
+        // Soft delete
+        await db_1.default.department.update({
             where: { id: parseInt(id) },
             data: { deletedAt: new Date() }
         });

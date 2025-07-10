@@ -8,18 +8,18 @@ exports.getAllCategories = getAllCategories;
 exports.getCategoryById = getCategoryById;
 exports.updateCategory = updateCategory;
 exports.deleteCategory = deleteCategory;
-const errorHandler_1 = require("../utils/errorHandler");
-const prisma_1 = __importDefault(require("../database/prisma"));
+const errorHandler_1 = require("../samples/errorHandler");
+const db_1 = __importDefault(require("../database/db"));
 async function createCategory(req, res) {
     try {
         const { name, description } = req.body;
-        const existingCategory = await prisma_1.default.category.findFirst({
+        const existingCategory = await db_1.default.category.findFirst({
             where: { name, deletedAt: null }
         });
         if (existingCategory) {
             throw new errorHandler_1.AppError("Category name is already taken", 409);
         }
-        const category = await prisma_1.default.category.create({
+        const category = await db_1.default.category.create({
             data: { name, description }
         });
         res.status(201).json({ success: true, data: category });
@@ -30,7 +30,7 @@ async function createCategory(req, res) {
 }
 async function getAllCategories(_req, res) {
     try {
-        const categories = await prisma_1.default.category.findMany({
+        const categories = await db_1.default.category.findMany({
             where: { deletedAt: null }
         });
         res.json({ success: true, data: categories });
@@ -41,7 +41,7 @@ async function getAllCategories(_req, res) {
 }
 async function getCategoryById(req, res) {
     try {
-        const category = await prisma_1.default.category.findFirst({
+        const category = await db_1.default.category.findFirst({
             where: { id: parseInt(req.params.id), deletedAt: null }
         });
         if (!category)
@@ -56,14 +56,14 @@ async function updateCategory(req, res) {
     try {
         const { id } = req.params;
         const { name, description } = req.body;
-        const category = await prisma_1.default.category.findFirst({
+        const category = await db_1.default.category.findFirst({
             where: { id: parseInt(id), deletedAt: null }
         });
         if (!category)
             throw new errorHandler_1.AppError("Category not found", 404);
         const updateData = {};
         if (name && name !== category.name) {
-            const existingCategory = await prisma_1.default.category.findFirst({
+            const existingCategory = await db_1.default.category.findFirst({
                 where: { name, deletedAt: null }
             });
             if (existingCategory) {
@@ -74,7 +74,7 @@ async function updateCategory(req, res) {
         if (description) {
             updateData.description = description;
         }
-        const updatedCategory = await prisma_1.default.category.update({
+        const updatedCategory = await db_1.default.category.update({
             where: { id: parseInt(id) },
             data: updateData
         });
@@ -87,18 +87,20 @@ async function updateCategory(req, res) {
 async function deleteCategory(req, res) {
     try {
         const { id } = req.params;
-        const category = await prisma_1.default.category.findFirst({
+        const category = await db_1.default.category.findFirst({
             where: { id: parseInt(id), deletedAt: null }
         });
         if (!category)
             throw new errorHandler_1.AppError("Category not found", 404);
-        const productsCount = await prisma_1.default.product.count({
+        // Check if category has products
+        const productsCount = await db_1.default.product.count({
             where: { categoryId: parseInt(id), deletedAt: null }
         });
         if (productsCount > 0) {
             throw new errorHandler_1.AppError("Cannot delete category with associated products", 400);
         }
-        await prisma_1.default.category.update({
+        // Soft delete
+        await db_1.default.category.update({
             where: { id: parseInt(id) },
             data: { deletedAt: new Date() }
         });

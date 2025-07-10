@@ -11,13 +11,14 @@ exports.getEmployeeAssignments = getEmployeeAssignments;
 exports.updateAssignment = updateAssignment;
 exports.bulkAssignProducts = bulkAssignProducts;
 exports.getProductAssignments = getProductAssignments;
-const errorHandler_1 = require("../utils/errorHandler");
-const prisma_1 = __importDefault(require("../database/prisma"));
+const errorHandler_1 = require("../samples/errorHandler");
+const db_1 = __importDefault(require("../database/db"));
 const client_1 = require("@prisma/client");
 async function assignProduct(req, res) {
     const { productId, employeeId, expectedReturnAt, notes } = req.body;
     console.log(req.user);
     const assignedById = req.user?.userId;
+    // Validate required fie  lds
     if (!assignedById) {
         res.status(401).json({ success: false, message: "Authentication required" });
         return;
@@ -27,7 +28,8 @@ async function assignProduct(req, res) {
         return;
     }
     try {
-        const product = await prisma_1.default.product.findFirst({
+        // Verify product exists, is not deleted, and not already assigned
+        const product = await db_1.default.product.findFirst({
             where: { id: productId },
             include: {
                 assignments: {
@@ -46,20 +48,22 @@ async function assignProduct(req, res) {
             res.status(400).json({ success: false, message: "Product is already assigned to someone" });
             return;
         }
-        const employee = await prisma_1.default.employee.findFirst({
+        // Verify employee exists and is not deleted
+        const employee = await db_1.default.employee.findFirst({
             where: { id: employeeId }
         });
         if (!employee) {
             res.status(404).json({ success: false, message: "Employee not found or is deleted" });
             return;
         }
+        // Validate expected return date if provided
         if (expectedReturnAt && new Date(expectedReturnAt) < new Date()) {
             res.status(400).json({
                 success: false,
                 message: "Expected return date cannot be in the past"
             });
         }
-        const assignment = await prisma_1.default.productAssignment.create({
+        const assignment = await db_1.default.productAssignment.create({
             data: {
                 productId,
                 employeeId,
@@ -112,7 +116,7 @@ async function returnProduct(req, res) {
     try {
         const { assignmentId } = req.params;
         const { condition, notes } = req.body;
-        const assignment = await prisma_1.default.productAssignment.findUnique({
+        const assignment = await db_1.default.productAssignment.findUnique({
             where: { id: parseInt(assignmentId) }
         });
         if (!assignment)
@@ -120,7 +124,7 @@ async function returnProduct(req, res) {
         if (assignment.status === "RETURNED") {
             throw new errorHandler_1.AppError("Product already returned", 400);
         }
-        const updatedAssignment = await prisma_1.default.productAssignment.update({
+        const updatedAssignment = await db_1.default.productAssignment.update({
             where: { id: parseInt(assignmentId) },
             data: {
                 status: "RETURNED",
@@ -142,9 +146,11 @@ async function returnProduct(req, res) {
 }
 async function getActiveAssignments(req, res) {
     try {
+        // Optional query parameters for pagination
         const { page = 1, limit = 10 } = req.query;
         const pageNumber = Number(page);
         const limitNumber = Number(limit);
+        // Validate pagination parameters
         if (isNaN(pageNumber)) {
             res.status(400).json({
                 success: false,
@@ -159,11 +165,11 @@ async function getActiveAssignments(req, res) {
             });
             return;
         }
-        const [assignments, total] = await prisma_1.default.$transaction([
-            prisma_1.default.productAssignment.findMany({
+        const [assignments, total] = await db_1.default.$transaction([
+            db_1.default.productAssignment.findMany({
                 where: {
                     status: "ASSIGNED",
-                    returnedAt: null
+                    returnedAt: null // Only filter by these fields
                 },
                 include: {
                     product: {
@@ -181,10 +187,10 @@ async function getActiveAssignments(req, res) {
                 skip: (pageNumber - 1) * limitNumber,
                 take: limitNumber
             }),
-            prisma_1.default.productAssignment.count({
+            db_1.default.productAssignment.count({
                 where: {
                     status: "ASSIGNED",
-                    returnedAt: null
+                    returnedAt: null // Only filter by these fields
                 }
             })
         ]);
@@ -219,7 +225,7 @@ async function getActiveAssignments(req, res) {
 }
 async function getAssignmentHistory(_req, res) {
     try {
-        const assignments = await prisma_1.default.productAssignment.findMany({
+        const assignments = await db_1.default.productAssignment.findMany({
             where: {
                 NOT: {
                     returnedAt: null
@@ -242,7 +248,7 @@ async function getAssignmentHistory(_req, res) {
 async function getEmployeeAssignments(req, res) {
     try {
         const { employeeId } = req.params;
-        const assignments = await prisma_1.default.productAssignment.findMany({
+        const assignments = await db_1.default.productAssignment.findMany({
             where: {
                 employeeId: parseInt(employeeId)
             },
@@ -263,7 +269,7 @@ async function updateAssignment(req, res) {
     try {
         const { assignmentId } = req.params;
         const { expectedReturnAt, notes } = req.body;
-        const assignment = await prisma_1.default.productAssignment.findUnique({
+        const assignment = await db_1.default.productAssignment.findUnique({
             where: { id: parseInt(assignmentId) }
         });
         if (!assignment)
@@ -271,7 +277,7 @@ async function updateAssignment(req, res) {
         if (assignment.status === "RETURNED") {
             throw new errorHandler_1.AppError("Cannot modify returned assignments", 400);
         }
-        const updatedAssignment = await prisma_1.default.productAssignment.update({
+        const updatedAssignment = await db_1.default.productAssignment.update({
             where: { id: parseInt(assignmentId) },
             data: {
                 expectedReturnAt: expectedReturnAt ? new Date(expectedReturnAt) : null,
@@ -299,8 +305,9 @@ async function bulkAssignProducts(req, res) {
         if (!assignedById) {
             throw new errorHandler_1.AppError("Authentication required", 401);
         }
-        const results = await prisma_1.default.$transaction(assignments.map(({ productId, employeeId, expectedReturnAt, notes }) => {
-            return prisma_1.default.productAssignment.create({
+        // Process assignments in a transaction
+        const results = await db_1.default.$transaction(assignments.map(({ productId, employeeId, expectedReturnAt, notes }) => {
+            return db_1.default.productAssignment.create({
                 data: {
                     productId,
                     employeeId,
@@ -332,7 +339,7 @@ async function getProductAssignments(req, res) {
         return;
     }
     try {
-        const assignments = await prisma_1.default.productAssignment.findMany({
+        const assignments = await db_1.default.productAssignment.findMany({
             where: {
                 productId: parseInt(productId)
             },

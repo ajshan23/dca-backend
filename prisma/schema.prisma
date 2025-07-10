@@ -1,7 +1,7 @@
 // schema.prisma
 datasource db {
   provider = "sqlserver"
-  url      = env("DATABASE_URL")
+  url      = "sqlserver://localhost:1433;database=master;user=sa;password=Glomium@123;encrypt=true;trustServerCertificate=true"
 }
 
 generator client {

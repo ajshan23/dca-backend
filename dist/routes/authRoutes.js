@@ -7,7 +7,7 @@ const express_1 = __importDefault(require("express"));
 const authController_1 = require("../controllers/authController");
 const authMiddleware_1 = require("../middlewares/authMiddleware");
 const roleMiddleware_1 = require("../middlewares/roleMiddleware");
-const roles_1 = require("../constants/roles");
+const roles_1 = require("../constant/roles");
 const router = express_1.default.Router();
 router.post("/login", authController_1.login);
 router.post("/", authMiddleware_1.authenticateJWT, (0, roleMiddleware_1.authorizeRoles)(roles_1.UserRole.ADMIN, roles_1.UserRole.SUPER_ADMIN), authController_1.createUser);

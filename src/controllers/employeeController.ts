@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
-import { AppError } from "../utils/errorHandler";
-import prisma from "@/database/prisma";
+import { AppError } from "../samples/errorHandler";
+import prisma from "../database/db";
 
 export async function createEmployee(req: Request, res: Response) {
   try {

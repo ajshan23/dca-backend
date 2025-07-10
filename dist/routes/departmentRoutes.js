@@ -7,7 +7,7 @@ const express_1 = __importDefault(require("express"));
 const departmentController_1 = require("../controllers/departmentController");
 const authMiddleware_1 = require("../middlewares/authMiddleware");
 const roleMiddleware_1 = require("../middlewares/roleMiddleware");
-const roles_1 = require("../constants/roles");
+const roles_1 = require("../constant/roles");
 const router = express_1.default.Router();
 router.post("/", authMiddleware_1.authenticateJWT, (0, roleMiddleware_1.authorizeRoles)(roles_1.UserRole.ADMIN, roles_1.UserRole.SUPER_ADMIN), departmentController_1.createDepartment);
 router.get("/", departmentController_1.getAllDepartments);

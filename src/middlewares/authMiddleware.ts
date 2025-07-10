@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import { AppError } from "../utils/errorHandler";
+import { AppError } from "../samples/errorHandler";
 
 
 export function authenticateJWT(

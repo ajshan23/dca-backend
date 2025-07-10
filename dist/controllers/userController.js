@@ -10,13 +10,13 @@ exports.updateUser = updateUser;
 exports.updateUserRole = updateUserRole;
 exports.deleteUser = deleteUser;
 exports.checkUsernameAvailability = checkUsernameAvailability;
-const errorHandler_1 = require("../utils/errorHandler");
+const errorHandler_1 = require("../samples/errorHandler");
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
-const prisma_1 = __importDefault(require("../database/prisma"));
+const db_1 = __importDefault(require("../database/db"));
 const BCRYPT_SALT_ROUNDS = 12;
 async function getAllUsers(_req, res) {
     try {
-        const users = await prisma_1.default.user.findMany({
+        const users = await db_1.default.user.findMany({
             where: { deletedAt: null },
             select: {
                 id: true,
@@ -36,7 +36,7 @@ async function getCurrentUser(req, res) {
     try {
         if (!req.user)
             throw new errorHandler_1.AppError("User not authenticated", 401);
-        const user = await prisma_1.default.user.findUnique({
+        const user = await db_1.default.user.findUnique({
             where: { id: (parseInt(req.user.userId)) },
             select: {
                 id: true,
@@ -56,7 +56,7 @@ async function getCurrentUser(req, res) {
 }
 async function getUserById(req, res) {
     try {
-        const user = await prisma_1.default.user.findUnique({
+        const user = await db_1.default.user.findUnique({
             where: { id: parseInt(req.params.id) },
             select: {
                 id: true,
@@ -80,18 +80,19 @@ async function updateUser(req, res) {
         const { username, password } = req.body;
         if (!req.user)
             throw new errorHandler_1.AppError("User not authenticated", 401);
+        // Ensure users can only update their own profile unless they're admin
         if (parseInt(req.user?.userId) !== parseInt(id)) {
             if (req.user?.role !== "ADMIN" && req.user?.role !== "SUPER_ADMIN") {
                 throw new errorHandler_1.AppError("You can only update your own profile", 403);
             }
         }
-        const user = await prisma_1.default.user.findUnique({ where: { id: parseInt(id) } });
+        const user = await db_1.default.user.findUnique({ where: { id: parseInt(id) } });
         if (!user)
             throw new errorHandler_1.AppError("User not found", 404);
         const updateData = {};
         if (username) {
             if (username !== user.username) {
-                const existingUser = await prisma_1.default.user.findFirst({
+                const existingUser = await db_1.default.user.findFirst({
                     where: { username, deletedAt: null }
                 });
                 if (existingUser) {
@@ -103,7 +104,7 @@ async function updateUser(req, res) {
         if (password) {
             updateData.passwordHash = await bcryptjs_1.default.hash(password, BCRYPT_SALT_ROUNDS);
         }
-        const updatedUser = await prisma_1.default.user.update({
+        const updatedUser = await db_1.default.user.update({
             where: { id: parseInt(id) },
             data: updateData,
             select: {
@@ -124,13 +125,14 @@ async function updateUserRole(req, res) {
     try {
         const { id } = req.params;
         const { role } = req.body;
-        const user = await prisma_1.default.user.findUnique({ where: { id: parseInt(id) } });
+        const user = await db_1.default.user.findUnique({ where: { id: parseInt(id) } });
         if (!user)
             throw new errorHandler_1.AppError("User not found", 404);
+        // Prevent modifying super admins
         if (user.role === "SUPER_ADMIN") {
             throw new errorHandler_1.AppError("Cannot modify super admin role", 403);
         }
-        const updatedUser = await prisma_1.default.user.update({
+        const updatedUser = await db_1.default.user.update({
             where: { id: parseInt(id) },
             data: { role },
             select: {
@@ -148,13 +150,15 @@ async function updateUserRole(req, res) {
 async function deleteUser(req, res) {
     try {
         const { id } = req.params;
-        const user = await prisma_1.default.user.findUnique({ where: { id: parseInt(id) } });
+        const user = await db_1.default.user.findUnique({ where: { id: parseInt(id) } });
         if (!user)
             throw new errorHandler_1.AppError("User not found", 404);
+        // Prevent deleting super admins
         if (user.role === "SUPER_ADMIN") {
             throw new errorHandler_1.AppError("Cannot delete super admin", 403);
         }
-        await prisma_1.default.user.update({
+        // Soft delete
+        await db_1.default.user.update({
             where: { id: parseInt(id) },
             data: { deletedAt: new Date() }
         });
@@ -170,7 +174,7 @@ async function checkUsernameAvailability(req, res) {
         if (!username || typeof username !== 'string') {
             throw new errorHandler_1.AppError("Username is required", 400);
         }
-        const existingUser = await prisma_1.default.user.findFirst({
+        const existingUser = await db_1.default.user.findFirst({
             where: { username, deletedAt: null }
         });
         res.json({ available: !existingUser });

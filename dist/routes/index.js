@@ -15,6 +15,7 @@ const dashboardRoutes_1 = __importDefault(require("./dashboardRoutes"));
 const departmentRoutes_1 = __importDefault(require("./departmentRoutes"));
 const seed_1 = require("../database/seed");
 const router = express_1.default.Router();
+// Health check endpoint
 router.get("/health", (_req, res) => {
     res.status(200).json({ status: "OK", timestamp: new Date() });
 });
@@ -26,6 +27,7 @@ router.get("/seed", (_req, res) => {
     (0, seed_1.main)();
     res.status(200).json({ status: "OK", timestamp: new Date() });
 });
+// Routes
 router.use("/users", userRoutes_1.default);
 router.use("/auth", authRoutes_1.default);
 router.use("/products", productRoutes_1.default);

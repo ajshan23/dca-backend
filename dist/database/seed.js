@@ -6,12 +6,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.main = main;
 exports.updateSuperAdminRole = updateSuperAdminRole;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
-const prisma_1 = __importDefault(require("./prisma"));
+const db_1 = __importDefault(require("./db"));
 async function main() {
     const superadminEmail = 'superadmin';
     const superadminPassword = 'SuperAdmin@1234';
+    // Hash the password
     const hashedPassword = await bcryptjs_1.default.hash(superadminPassword, 12);
-    const existingSuperadmin = await prisma_1.default.user.findFirst({
+    // Check if superadmin already exists
+    const existingSuperadmin = await db_1.default.user.findFirst({
         where: {
             OR: [
                 { username: superadminEmail },
@@ -23,7 +25,8 @@ async function main() {
         console.log('Superadmin already exists:', existingSuperadmin);
         return;
     }
-    const superadmin = await prisma_1.default.user.create({
+    // Create superadmin
+    const superadmin = await db_1.default.user.create({
         data: {
             username: superadminEmail,
             passwordHash: hashedPassword,
@@ -39,7 +42,7 @@ async function main() {
     });
 }
 async function updateSuperAdminRole() {
-    const result = await prisma_1.default.user.updateMany({
+    const result = await db_1.default.user.updateMany({
         where: {
             role: 'SUPER_ADMIN',
         },

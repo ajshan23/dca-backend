@@ -1,7 +1,7 @@
 // validationMiddleware.ts
 import { Request, Response, NextFunction } from "express";
 import { ObjectSchema } from "joi";
-import { AppError } from "../utils/errorHandler";
+import { AppError } from "../samples/errorHandler";
 
 export function validateRequest(schema: ObjectSchema) {
   return (req: Request, _res: Response, next: NextFunction) => {

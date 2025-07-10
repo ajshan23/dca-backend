@@ -3,9 +3,9 @@ import helmet from "helmet";
 import cors from "cors";
 import morgan from "morgan";
 import config from "./config";
-import prisma from "./database/prisma";
+import prisma from "./database/db";
 import routes from "./routes";
-import { errorHandler } from "./utils/errorHandler";
+import { errorHandler } from "./samples/errorHandler";
 
 const app = express();
 

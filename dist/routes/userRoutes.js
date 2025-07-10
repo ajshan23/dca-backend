@@ -7,14 +7,20 @@ const express_1 = __importDefault(require("express"));
 const userController_1 = require("../controllers/userController");
 const authMiddleware_1 = require("../middlewares/authMiddleware");
 const roleMiddleware_1 = require("../middlewares/roleMiddleware");
-const roles_1 = require("../constants/roles");
+const roles_1 = require("../constant/roles");
 const router = express_1.default.Router();
+// Get current user profile (for any authenticated user)
 router.get("/me", authMiddleware_1.authenticateJWT, userController_1.getCurrentUser);
+// Check username availability
 router.get("/check-username", userController_1.checkUsernameAvailability);
+// Admin-only routes
 router.get("/", authMiddleware_1.authenticateJWT, (0, roleMiddleware_1.authorizeRoles)(roles_1.UserRole.ADMIN, roles_1.UserRole.SUPER_ADMIN), userController_1.getAllUsers);
 router.get("/:id", authMiddleware_1.authenticateJWT, (0, roleMiddleware_1.authorizeRoles)(roles_1.UserRole.ADMIN, roles_1.UserRole.SUPER_ADMIN), userController_1.getUserById);
+// User can update their own profile
 router.patch("/:id", authMiddleware_1.authenticateJWT, userController_1.updateUser);
+// Only super admin can change roles
 router.patch("/:id/role", authMiddleware_1.authenticateJWT, (0, roleMiddleware_1.authorizeRoles)(roles_1.UserRole.SUPER_ADMIN), userController_1.updateUserRole);
+// Only super admin can delete users
 router.delete("/:id", authMiddleware_1.authenticateJWT, (0, roleMiddleware_1.authorizeRoles)(roles_1.UserRole.SUPER_ADMIN), userController_1.deleteUser);
 exports.default = router;
 //# sourceMappingURL=userRoutes.js.map

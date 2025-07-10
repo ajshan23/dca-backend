@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
-import { AppError } from "../utils/errorHandler";
-import prisma from "../database/prisma";
+import { AppError } from "../samples/errorHandler";
+import prisma from "../database/db";
 import { Prisma } from "@prisma/client";
 import QRCode from 'qrcode';
 

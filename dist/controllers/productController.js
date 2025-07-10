@@ -10,37 +10,41 @@ exports.getAssignedProducts = getAssignedProducts;
 exports.getProductById = getProductById;
 exports.updateProduct = updateProduct;
 exports.deleteProduct = deleteProduct;
-const errorHandler_1 = require("../utils/errorHandler");
-const prisma_1 = __importDefault(require("../database/prisma"));
+const errorHandler_1 = require("../samples/errorHandler");
+const db_1 = __importDefault(require("../database/db"));
 const client_1 = require("@prisma/client");
 const qrcode_1 = __importDefault(require("qrcode"));
 async function createProduct(req, res) {
     try {
         const { name, model, categoryId, branchId, departmentId, warrantyDate, complianceStatus, notes } = req.body;
+        // Validate required fields
         if (!name || !model || !categoryId || !branchId) {
             throw new errorHandler_1.AppError("Missing required fields", 400);
         }
-        const categoryExists = await prisma_1.default.category.findFirst({
+        // Check if category exists
+        const categoryExists = await db_1.default.category.findFirst({
             where: { id: categoryId, deletedAt: null }
         });
         if (!categoryExists) {
             throw new errorHandler_1.AppError("Category not found", 404);
         }
-        const branchExists = await prisma_1.default.branch.findFirst({
+        // Check if branch exists
+        const branchExists = await db_1.default.branch.findFirst({
             where: { id: branchId, deletedAt: null }
         });
         if (!branchExists) {
             throw new errorHandler_1.AppError("Branch not found", 404);
         }
+        // Check if department exists if provided
         if (departmentId) {
-            const departmentExists = await prisma_1.default.department.findFirst({
+            const departmentExists = await db_1.default.department.findFirst({
                 where: { id: departmentId, deletedAt: null }
             });
             if (!departmentExists) {
                 throw new errorHandler_1.AppError("Department not found", 404);
             }
         }
-        const product = await prisma_1.default.product.create({
+        const product = await db_1.default.product.create({
             data: {
                 name,
                 model,
@@ -88,6 +92,7 @@ async function getAllProducts(req, res) {
             ],
             deletedAt: null
         };
+        // Add optional filters
         if (categoryId) {
             where.categoryId = parseInt(categoryId);
         }
@@ -100,8 +105,8 @@ async function getAllProducts(req, res) {
         if (complianceStatus) {
             where.complianceStatus = complianceStatus === 'true';
         }
-        const [products, total] = await prisma_1.default.$transaction([
-            prisma_1.default.product.findMany({
+        const [products, total] = await db_1.default.$transaction([
+            db_1.default.product.findMany({
                 skip: (Number(page) - 1) * Number(limit),
                 take: Number(limit),
                 where,
@@ -123,7 +128,7 @@ async function getAllProducts(req, res) {
                     createdAt: 'desc'
                 }
             }),
-            prisma_1.default.product.count({ where })
+            db_1.default.product.count({ where })
         ]);
         res.json({
             success: true,
@@ -162,6 +167,7 @@ async function getAssignedProducts(req, res) {
             ],
             deletedAt: null
         };
+        // Add optional filters
         if (categoryId) {
             where.categoryId = parseInt(categoryId);
         }
@@ -171,8 +177,8 @@ async function getAssignedProducts(req, res) {
         if (departmentId) {
             where.departmentId = parseInt(departmentId);
         }
-        const [products, total] = await prisma_1.default.$transaction([
-            prisma_1.default.product.findMany({
+        const [products, total] = await db_1.default.$transaction([
+            db_1.default.product.findMany({
                 skip: (Number(page) - 1) * Number(limit),
                 take: Number(limit),
                 where,
@@ -194,7 +200,7 @@ async function getAssignedProducts(req, res) {
                     createdAt: 'desc'
                 }
             }),
-            prisma_1.default.product.count({ where })
+            db_1.default.product.count({ where })
         ]);
         res.json({
             success: true,
@@ -213,7 +219,7 @@ async function getAssignedProducts(req, res) {
 }
 async function getProductById(req, res) {
     try {
-        const product = await prisma_1.default.product.findUnique({
+        const product = await db_1.default.product.findUnique({
             where: {
                 id: parseInt(req.params.id),
                 deletedAt: null
@@ -249,21 +255,23 @@ async function updateProduct(req, res) {
     try {
         const { id } = req.params;
         const { departmentId, ...updateData } = req.body;
-        const existingProduct = await prisma_1.default.product.findFirst({
+        // Check if product exists
+        const existingProduct = await db_1.default.product.findFirst({
             where: { id: parseInt(id), deletedAt: null }
         });
         if (!existingProduct) {
             throw new errorHandler_1.AppError("Product not found", 404);
         }
+        // Validate department if provided
         if (departmentId) {
-            const departmentExists = await prisma_1.default.department.findFirst({
+            const departmentExists = await db_1.default.department.findFirst({
                 where: { id: departmentId, deletedAt: null }
             });
             if (!departmentExists) {
                 throw new errorHandler_1.AppError("Department not found", 404);
             }
         }
-        const product = await prisma_1.default.product.update({
+        const product = await db_1.default.product.update({
             where: { id: parseInt(id) },
             data: {
                 ...updateData,
@@ -300,19 +308,21 @@ async function updateProduct(req, res) {
 async function deleteProduct(req, res) {
     try {
         const { id } = req.params;
-        const productExists = await prisma_1.default.product.findFirst({
+        // Check if product exists
+        const productExists = await db_1.default.product.findFirst({
             where: { id: parseInt(id), deletedAt: null }
         });
         if (!productExists) {
             throw new errorHandler_1.AppError("Product not found", 404);
         }
-        const assignments = await prisma_1.default.productAssignment.count({
+        const assignments = await db_1.default.productAssignment.count({
             where: { productId: parseInt(id) }
         });
         if (assignments > 0) {
             throw new errorHandler_1.AppError("Cannot delete product with active assignments", 400);
         }
-        await prisma_1.default.product.update({
+        // Soft delete
+        await db_1.default.product.update({
             where: { id: parseInt(id) },
             data: { deletedAt: new Date() }
         });
@@ -328,7 +338,8 @@ const generateProductQr = async (req, res) => {
         if (!id) {
             throw new errorHandler_1.AppError('Product ID is required', 400);
         }
-        const productExists = await prisma_1.default.product.findFirst({
+        // Check if product exists
+        const productExists = await db_1.default.product.findFirst({
             where: { id: parseInt(id), deletedAt: null }
         });
         if (!productExists) {
