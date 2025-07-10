@@ -11,13 +11,14 @@ import {
 } from "../controllers/productController";
 import { authorizeRoles } from "@/middlewares/roleMiddleware";
 import { authenticateJWT } from "@/middlewares/authMiddleware";
+import { UserRole } from "../constants/roles";
 
 const router = express.Router();
 
 router.post(
   "/",
   authenticateJWT,
-  authorizeRoles("admin", "super_admin"),
+  authorizeRoles(UserRole.ADMIN, UserRole.SUPER_ADMIN),
   createProduct
 );
 router.get("/", getAllProducts);
@@ -26,14 +27,14 @@ router.get("/:id", getProductById);
 router.put(
   "/:id",
   authenticateJWT,
-  authorizeRoles("admin", "super_admin"),
+  authorizeRoles(UserRole.ADMIN, UserRole.SUPER_ADMIN),
   updateProduct
 );
 
 router.delete(
   "/:id",
   authenticateJWT,
-  authorizeRoles("admin", "super_admin"),
+  authorizeRoles(UserRole.ADMIN, UserRole.SUPER_ADMIN),
   deleteProduct
 );
 router.post(

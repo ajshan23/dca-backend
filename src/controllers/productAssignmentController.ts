@@ -8,14 +8,16 @@ export async function assignProduct(req: Request, res: Response) {
   const { productId, employeeId, expectedReturnAt, notes } = req.body;
   console.log(req.user);
   
-  const assignedById = req.user?.id;
+  const assignedById = req.user?.userId;
 
   // Validate required fie  lds
   if (!assignedById) {
-    return res.status(401).json({ success: false, message: "Authentication required" });
+     res.status(401).json({ success: false, message: "Authentication required" });
+     return;
   }
   if (!productId || !employeeId) {
-    return res.status(400).json({ success: false, message: "Product ID and Employee ID are required" });
+     res.status(400).json({ success: false, message: "Product ID and Employee ID are required" });
+     return
   }
 
   try {
@@ -33,10 +35,12 @@ export async function assignProduct(req: Request, res: Response) {
     });
 
     if (!product) {
-      return res.status(404).json({ success: false, message: "Product not found or is deleted" });
+       res.status(404).json({ success: false, message: "Product not found or is deleted" });
+       return;
     }
     if (product.assignments.length > 0) {
-      return res.status(400).json({ success: false, message: "Product is already assigned to someone" });
+      res.status(400).json({ success: false, message: "Product is already assigned to someone" });
+      return;
     }
 
     // Verify employee exists and is not deleted
@@ -44,12 +48,13 @@ export async function assignProduct(req: Request, res: Response) {
       where: { id: employeeId}
     });
     if (!employee) {
-      return res.status(404).json({ success: false, message: "Employee not found or is deleted" });
+      res.status(404).json({ success: false, message: "Employee not found or is deleted" });
+      return;
     }
 
     // Validate expected return date if provided
     if (expectedReturnAt && new Date(expectedReturnAt) < new Date()) {
-      return res.status(400).json({ 
+      res.status(400).json({ 
         success: false, 
         message: "Expected return date cannot be in the past" 
       });
@@ -59,7 +64,7 @@ export async function assignProduct(req: Request, res: Response) {
       data: {
         productId,
         employeeId,
-        assignedById,
+        assignedById: parseInt(assignedById),
         expectedReturnAt: expectedReturnAt ? new Date(expectedReturnAt) : null,
         notes,
         status: "ASSIGNED"
@@ -76,30 +81,34 @@ export async function assignProduct(req: Request, res: Response) {
       }
     });
 
-    return res.status(201).json({ success: true, data: assignment });
+    res.status(201).json({ success: true, data: assignment });
+    return;
   } catch (error) {
     console.error('Assignment error:', error);
     
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === 'P2002') {
-        return res.status(400).json({ 
+        res.status(400).json({ 
           success: false, 
           message: "Assignment conflict - this combination already exists" 
         });
+        return;
       }
       if (error.code === 'P2003') {
-        return res.status(400).json({ 
+        res.status(400).json({ 
           success: false, 
           message: "Invalid ID provided - product or employee doesn't exist" 
         });
+        return;
       }
     }
     
-    return res.status(500).json({ 
+    res.status(500).json({ 
       success: false, 
       message: "Failed to assign product",
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      error:  undefined
     });
+    return;
   }
 }
 export async function returnProduct(req: Request, res: Response) {
@@ -146,17 +155,19 @@ export async function getActiveAssignments(req: Request, res: Response) {
 
     // Validate pagination parameters
     if (isNaN(pageNumber)) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         message: "Invalid page number"
       });
+      return;
     }
 
     if (isNaN(limitNumber)) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         message: "Invalid limit value"
       });
+      return;
     }
 
     const [assignments, total] = await prisma.$transaction([
@@ -189,7 +200,7 @@ export async function getActiveAssignments(req: Request, res: Response) {
       })
     ]);
 
-    return res.json({
+     res.json({
       success: true,
       data: assignments,
       pagination: {
@@ -199,24 +210,27 @@ export async function getActiveAssignments(req: Request, res: Response) {
         totalPages: Math.ceil(total / limitNumber)
       }
     });
+    return
   } catch (error) {
     console.error('Error fetching active assignments:', error);
     
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      return res.status(400).json({
+       res.status(400).json({
         success: false,
         message: "Database error occurred"
       });
+      return;
     }
 
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       message: "Failed to fetch active assignments",
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      error: undefined
     });
+    return;
   }
 }
-export async function getAssignmentHistory(req: Request, res: Response) {
+export async function getAssignmentHistory(_req: Request, res: Response) {
   try {
     const assignments = await prisma.productAssignment.findMany({
       where: {
@@ -294,7 +308,7 @@ export async function updateAssignment(req: Request, res: Response) {
 export async function bulkAssignProducts(req: Request, res: Response) {
   try {
     const { assignments } = req.body;
-    const assignedById = req.user?.id;
+    const assignedById = req.user?.userId;
 
     if (!Array.isArray(assignments)) {
       throw new AppError("Assignments must be an array", 400);
@@ -311,7 +325,7 @@ export async function bulkAssignProducts(req: Request, res: Response) {
           data: {
             productId,
             employeeId,
-            assignedById,
+            assignedById: parseInt(assignedById),
             expectedReturnAt: expectedReturnAt ? new Date(expectedReturnAt) : null,
             notes,
             status: "ASSIGNED"
@@ -334,10 +348,11 @@ export async function getProductAssignments(req: Request, res: Response) {
   const { productId } = req.params;
   
   if (!productId) {
-    return res.status(400).json({ 
+    res.status(400).json({ 
       success: false, 
       message: "Product ID is required" 
     });
+    return;
   }
 
   try {
@@ -361,31 +376,35 @@ export async function getProductAssignments(req: Request, res: Response) {
     });
 
     if (!assignments || assignments.length === 0) {
-      return res.status(404).json({ 
+       res.status(404).json({ 
         success: false, 
         message: "No assignments found for this product" 
       });
+      return;
     }
 
-    return res.json({ 
+     res.json({ 
       success: true, 
       data: assignments 
     });
+    return
   } catch (error) {
     console.error('Error fetching product assignments:', error);
     
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      return res.status(400).json({ 
+       res.status(400).json({ 
         success: false, 
         message: "Invalid product ID format" 
       });
+      return;
     }
     
-    return res.status(500).json({ 
+    res.status(500).json({ 
       success: false, 
       message: "Failed to fetch product assignments",
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      error: undefined
     });
+    return;
   }
 }
 

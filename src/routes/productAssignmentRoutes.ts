@@ -11,6 +11,7 @@ import {
 } from "../controllers/productAssignmentController";
 import { authenticateJWT } from "../middlewares/authMiddleware";
 import { authorizeRoles } from "../middlewares/roleMiddleware";
+import { UserRole } from "../constants/roles";
 
 
 const router = express.Router();
@@ -18,14 +19,14 @@ const router = express.Router();
 router.post(
   "/assign",
   authenticateJWT,
-  authorizeRoles("admin", "super_admin"),
+  authorizeRoles(UserRole.ADMIN, UserRole.SUPER_ADMIN),
   assignProduct
 );
 
 router.post(
   "/bulk-assign",
   authenticateJWT,
-  authorizeRoles("admin", "super_admin"),
+  authorizeRoles(UserRole.ADMIN, UserRole.SUPER_ADMIN),
   bulkAssignProducts
 );
 // Add this to your productAssignmentRoutes.ts
@@ -37,7 +38,7 @@ router.get(
 router.post(
   "/return/:assignmentId",
   authenticateJWT,
-  authorizeRoles("admin", "super_admin"),
+  authorizeRoles(UserRole.ADMIN, UserRole.SUPER_ADMIN),
   returnProduct
 );
 

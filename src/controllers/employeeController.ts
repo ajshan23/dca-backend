@@ -1,8 +1,6 @@
 import { Request, Response } from "express";
-import { PrismaClient } from "@prisma/client";
 import { AppError } from "../utils/errorHandler";
-
-const prisma = new PrismaClient();
+import prisma from "@/database/prisma";
 
 export async function createEmployee(req: Request, res: Response) {
   try {

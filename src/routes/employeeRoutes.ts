@@ -8,13 +8,14 @@ import {
 } from "../controllers/employeeController";
 import { authenticateJWT } from "../middlewares/authMiddleware";
 import { authorizeRoles } from "../middlewares/roleMiddleware";
+import { UserRole } from "../constants/roles";
 
 const router = express.Router();
 
 router.post(
   "/",
   authenticateJWT,
-  authorizeRoles("admin", "super_admin"),
+  authorizeRoles(UserRole.ADMIN, UserRole.SUPER_ADMIN),
   createEmployee
 );
 
@@ -24,14 +25,14 @@ router.get("/:id", authenticateJWT, getEmployeeById);
 router.put(
   "/:id",
   authenticateJWT,
-  authorizeRoles("admin", "super_admin"),
+  authorizeRoles(UserRole.ADMIN, UserRole.SUPER_ADMIN),
   updateEmployee
 );
 
 router.delete(
   "/:id",
   authenticateJWT,
-  authorizeRoles("admin", "super_admin"),
+  authorizeRoles(UserRole.ADMIN, UserRole.SUPER_ADMIN),
   deleteEmployee
 );
 

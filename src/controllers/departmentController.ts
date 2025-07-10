@@ -24,7 +24,7 @@ export async function createDepartment(req: Request, res: Response) {
   }
 }
 
-export async function getAllDepartments(req: Request, res: Response) {
+export async function getAllDepartments(_req: Request, res: Response) {
   try {
     const departments = await prisma.department.findMany({
       where: { deletedAt: null }
@@ -101,13 +101,10 @@ export async function deleteDepartment(req: Request, res: Response) {
       where: { departmentId: parseInt(id), deletedAt: null }
     });
 
-    // Check if department has employees
-    const employeesCount = await prisma.employee.count({
-      where: { departmentId: parseInt(id), deletedAt: null }
-    });
+    
 
-    if (productsCount > 0 || employeesCount > 0) {
-      throw new AppError("Cannot delete department with associated products or employees", 400);
+    if (productsCount >  0) {
+      throw new AppError("Cannot delete department with associated products ", 400);
     }
 
     // Soft delete

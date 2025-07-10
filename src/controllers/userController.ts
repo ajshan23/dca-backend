@@ -6,7 +6,7 @@ import prisma from "@/database/prisma";
 
 const BCRYPT_SALT_ROUNDS = 12;
 
-export async function getAllUsers(req: Request, res: Response) {
+export async function getAllUsers(_req: Request, res: Response) {
   try {
     const users = await prisma.user.findMany({
       where: { deletedAt: null },
@@ -29,7 +29,7 @@ export async function getCurrentUser(req: Request, res: Response) {
     if (!req.user) throw new AppError("User not authenticated", 401);
     
     const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
+      where: { id: (parseInt(req.user.userId)) },
       select: {
         id: true,
         username: true,
@@ -72,9 +72,9 @@ export async function updateUser(req: Request, res: Response) {
   try {
     const { id } = req.params;
     const { username, password } = req.body;
-    
+    if (!req.user) throw new AppError("User not authenticated", 401);
     // Ensure users can only update their own profile unless they're admin
-    if (req.user?.id !== parseInt(id) ){
+    if (parseInt(req.user?.userId) !== parseInt(id) ){
       if (req.user?.role !== "ADMIN" && req.user?.role !== "SUPER_ADMIN") {
         throw new AppError("You can only update your own profile", 403);
       }

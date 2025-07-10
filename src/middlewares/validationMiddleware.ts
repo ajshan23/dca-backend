@@ -1,18 +1,14 @@
+// validationMiddleware.ts
 import { Request, Response, NextFunction } from "express";
-import { AnySchema } from "yup";
+import { ObjectSchema } from "joi";
 import { AppError } from "../utils/errorHandler";
 
-export function validateRequest(schema: AnySchema) {
-  return async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      await schema.validate({
-        body: req.body,
-        query: req.query,
-        params: req.params,
-      });
-      return next();
-    } catch (err) {
-      return next(new AppError(err.message! as string, 400));
+export function validateRequest(schema: ObjectSchema) {
+  return (req: Request, _res: Response, next: NextFunction) => {
+    const { error } = schema.validate(req.body);
+    if (error) {
+      return next(new AppError(error.details[0].message, 400));
     }
+    next();
   };
 }

@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
-import { PrismaClient } from "@prisma/client";
 import { AppError } from "../utils/errorHandler";
+import prisma from "@/database/prisma";
 
-const prisma = new PrismaClient();
+
 
 export async function createBranch(req: Request, res: Response) {
   try {
@@ -26,7 +26,7 @@ export async function createBranch(req: Request, res: Response) {
   }
 }
 
-export async function getAllBranches(req: Request, res: Response) {
+export async function getAllBranches(_req: Request, res: Response) {
   try {
     const branches = await prisma.branch.findMany({
       where: { deletedAt: null }

@@ -1,3 +1,4 @@
+// routes/branchRoutes.ts
 import express from "express";
 import {
   createBranch,
@@ -8,16 +9,14 @@ import {
 } from "../controllers/branchController";
 import { authenticateJWT } from "../middlewares/authMiddleware";
 import { authorizeRoles } from "../middlewares/roleMiddleware";
-import { validateRequest } from "../middlewares/validationMiddleware";
-import { createBranchSchema, updateBranchSchema } from "../validations/branchValidations";
-
+import { UserRole } from "../constants/roles";
 
 const router = express.Router();
 
 router.post(
   "/",
   authenticateJWT,
-  authorizeRoles("admin", "super_admin"),
+  authorizeRoles(UserRole.ADMIN, UserRole.SUPER_ADMIN),
   createBranch
 );
 
@@ -27,15 +26,14 @@ router.get("/:id", getBranchById);
 router.put(
   "/:id",
   authenticateJWT,
-  authorizeRoles("admin", "super_admin"),
-  validateRequest(updateBranchSchema),
+  authorizeRoles(UserRole.ADMIN, UserRole.SUPER_ADMIN),
   updateBranch
 );
 
 router.delete(
   "/:id",
   authenticateJWT,
-  authorizeRoles("admin", "super_admin"),
+  authorizeRoles(UserRole.ADMIN, UserRole.SUPER_ADMIN),
   deleteBranch
 );
 

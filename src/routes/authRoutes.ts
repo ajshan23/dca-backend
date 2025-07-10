@@ -2,8 +2,7 @@ import express from "express";
 import { login, createUser, updateUser } from "../controllers/authController";
 import { authenticateJWT } from "../middlewares/authMiddleware";
 import { authorizeRoles } from "../middlewares/roleMiddleware";
-import { validateRequest } from "../middlewares/validationMiddleware";
-import { loginSchema, createUserSchema, updateUserSchema } from "../validations/authValidations";
+import { UserRole } from "../constants/roles";
 
 
 const router = express.Router();
@@ -13,16 +12,15 @@ router.post("/login",  login);
 router.post(
   "/",
   authenticateJWT,
-  authorizeRoles("admin", "super_admin"),
-  validateRequest(createUserSchema),
+  authorizeRoles(UserRole.ADMIN, UserRole.SUPER_ADMIN),
+ 
   createUser
 );
 
 router.put(
   "/:id",
   authenticateJWT,
-  authorizeRoles("admin", "super_admin"),
-  validateRequest(updateUserSchema),
+  authorizeRoles(UserRole.ADMIN, UserRole.SUPER_ADMIN),
   updateUser
 );
 

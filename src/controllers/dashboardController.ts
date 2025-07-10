@@ -3,7 +3,7 @@ import { AppError } from "../utils/errorHandler";
 import prisma from "@/database/prisma";
 import { startOfWeek, endOfWeek, eachDayOfInterval, format } from "date-fns";
 
-export async function getProductDashboardData(req: Request, res: Response) {
+export async function getProductDashboardData( _req: Request, res: Response) {
   try {
     // Get counts for products
     const [totalProducts, assignedProducts, availableProducts] = await Promise.all([

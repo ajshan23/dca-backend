@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
-import { PrismaClient } from "@prisma/client";
 import { AppError } from "../utils/errorHandler";
+import prisma from "@/database/prisma";
 
-const prisma = new PrismaClient();
+
 
 export async function createCategory(req: Request, res: Response) {
   try {
@@ -26,7 +26,7 @@ export async function createCategory(req: Request, res: Response) {
   }
 }
 
-export async function getAllCategories(req: Request, res: Response) {
+export async function getAllCategories(_req: Request, res: Response) {
   try {
     const categories = await prisma.category.findMany({
       where: { deletedAt: null }

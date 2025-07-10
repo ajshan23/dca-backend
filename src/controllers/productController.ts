@@ -70,7 +70,12 @@ export async function createProduct(req: Request, res: Response) {
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === 'P2002') {
-        const field = error.meta?.target?.[0] || 'field';
+        let field = 'field';
+        if (Array.isArray(error.meta?.target)) {
+          field = error.meta.target[0];
+        } else if (typeof error.meta?.target === 'string') {
+          field = error.meta.target;
+        }
         throw new AppError(`A product with this ${field} already exists`, 400);
       }
       if (error.code === 'P2003') {
@@ -316,7 +321,12 @@ export async function updateProduct(req: Request, res: Response) {
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === 'P2002') {
-        const field = error.meta?.target?.[0] || 'field';
+        let field = 'field';
+        if (Array.isArray(error.meta?.target)) {
+          field = error.meta.target[0];
+        } else if (typeof error.meta?.target === 'string') {
+          field = error.meta.target;
+        }
         throw new AppError(`A product with this ${field} already exists`, 400);
       }
       if (error.code === 'P2003') {

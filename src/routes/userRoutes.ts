@@ -10,8 +10,7 @@ import {
 } from "../controllers/userController";
 import { authenticateJWT } from "../middlewares/authMiddleware";
 import { authorizeRoles } from "../middlewares/roleMiddleware";
-import { validateRequest } from "../middlewares/validationMiddleware";
-import { updateUserSchema, updateRoleSchema } from "../validations/userValidations";
+import { UserRole } from "@/constants/roles";
 
 const router = express.Router();
 
@@ -25,14 +24,14 @@ router.get("/check-username", checkUsernameAvailability);
 router.get(
   "/",
   authenticateJWT,
-  authorizeRoles("admin", "super_admin"),
+  authorizeRoles(UserRole.ADMIN, UserRole.SUPER_ADMIN),
   getAllUsers
 );
 
 router.get(
   "/:id",
   authenticateJWT,
-  authorizeRoles("admin", "super_admin"),
+  authorizeRoles(UserRole.ADMIN, UserRole.SUPER_ADMIN),
   getUserById
 );
 
@@ -40,7 +39,6 @@ router.get(
 router.patch(
   "/:id",
   authenticateJWT,
-  validateRequest(updateUserSchema),
   updateUser
 );
 
@@ -48,8 +46,7 @@ router.patch(
 router.patch(
   "/:id/role",
   authenticateJWT,
-  authorizeRoles("super_admin"),
-  validateRequest(updateRoleSchema),
+  authorizeRoles(UserRole.SUPER_ADMIN),
   updateUserRole
 );
 
@@ -57,7 +54,7 @@ router.patch(
 router.delete(
   "/:id",
   authenticateJWT,
-  authorizeRoles("super_admin"),
+  authorizeRoles( UserRole.SUPER_ADMIN),
   deleteUser
 );
 
