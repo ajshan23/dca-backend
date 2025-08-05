@@ -2,22 +2,28 @@ import { Request, Response } from "express";
 import { AppError } from "../samples/errorHandler";
 import prisma from "../database/db";
 
-
-
 export async function createBranch(req: Request, res: Response) {
   try {
     const { name } = req.body;
 
+    if (!name) throw new AppError("Branch name is required", 400);
+
     const existingBranch = await prisma.branch.findFirst({
-      where: { name, deletedAt: null }
+      where: { 
+        name: { equals: name },
+        deletedAt: null 
+      }
     });
 
-    if (existingBranch) {
-      throw new AppError("Branch name is already taken", 409);
-    }
+    if (existingBranch) throw new AppError("Branch name already exists", 409);
 
     const branch = await prisma.branch.create({
-      data: { name }
+      data: { name },
+      select: {
+        id: true,
+        name: true,
+        createdAt: true
+      }
     });
 
     res.status(201).json({ success: true, data: branch });
@@ -26,11 +32,34 @@ export async function createBranch(req: Request, res: Response) {
   }
 }
 
-export async function getAllBranches(_req: Request, res: Response) {
+export async function getAllBranches(req: Request, res: Response) {
   try {
+    const { search } = req.query;
+    
+    const where: any = { deletedAt: null };
+    
+    if (search) {
+      where.name = { contains: search as string, mode: 'insensitive' };
+    }
+
     const branches = await prisma.branch.findMany({
-      where: { deletedAt: null }
+      where,
+      select: {
+        id: true,
+        name: true,
+        createdAt: true,
+        _count: {
+          select: {
+            products: true,
+            employees: true
+          }
+        }
+      },
+      orderBy: {
+        name: 'asc'
+      }
     });
+
     res.json({ success: true, data: branches });
   } catch (error) {
     throw new AppError("Failed to fetch branches", 500);
@@ -39,10 +68,28 @@ export async function getAllBranches(_req: Request, res: Response) {
 
 export async function getBranchById(req: Request, res: Response) {
   try {
-    const branch = await prisma.branch.findFirst({
-      where: { id: parseInt(req.params.id), deletedAt: null }
+    const branch = await prisma.branch.findUnique({
+      where: { id: parseInt(req.params.id) },
+      select: {
+        id: true,
+        name: true,
+        createdAt: true,
+        updatedAt: true,
+        products: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        employees: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      }
     });
-    
+
     if (!branch) throw new AppError("Branch not found", 404);
     
     res.json({ success: true, data: branch });
@@ -56,28 +103,32 @@ export async function updateBranch(req: Request, res: Response) {
     const { id } = req.params;
     const { name } = req.body;
 
-    const branch = await prisma.branch.findFirst({
-      where: { id: parseInt(id), deletedAt: null }
+    if (!name) throw new AppError("Branch name is required", 400);
+
+    const branch = await prisma.branch.findUnique({
+      where: { id: parseInt(id) }
     });
     
     if (!branch) throw new AppError("Branch not found", 404);
 
-    if (name && name !== branch.name) {
+    if (name !== branch.name) {
       const existingBranch = await prisma.branch.findFirst({
-        where: { name, deletedAt: null }
+        where: { 
+          name: { equals: name },
+          deletedAt: null 
+        }
       });
-      if (existingBranch) {
-        throw new AppError("Branch name is already taken", 409);
-      }
-      
-      await prisma.branch.update({
-        where: { id: parseInt(id) },
-        data: { name }
-      });
+      if (existingBranch) throw new AppError("Branch name already exists", 409);
     }
 
-    const updatedBranch = await prisma.branch.findUnique({
-      where: { id: parseInt(id) }
+    const updatedBranch = await prisma.branch.update({
+      where: { id: parseInt(id) },
+      data: { name },
+      select: {
+        id: true,
+        name: true,
+        updatedAt: true
+      }
     });
 
     res.json({ success: true, data: updatedBranch });
@@ -89,27 +140,25 @@ export async function updateBranch(req: Request, res: Response) {
 export async function deleteBranch(req: Request, res: Response) {
   try {
     const { id } = req.params;
-    const branch = await prisma.branch.findFirst({
-      where: { id: parseInt(id), deletedAt: null }
+
+    const branch = await prisma.branch.findUnique({
+      where: { id: parseInt(id) },
+      include: {
+        _count: {
+          select: {
+            products: true,
+            employees: true
+          }
+        }
+      }
     });
     
     if (!branch) throw new AppError("Branch not found", 404);
 
-    // Check if branch has products or employees
-    const [productsCount, employeesCount] = await Promise.all([
-      prisma.product.count({
-        where: { branchId: parseInt(id), deletedAt: null }
-      }),
-      prisma.employee.count({
-        where: { branchId: parseInt(id), deletedAt: null }
-      })
-    ]);
-
-    if (productsCount > 0 || employeesCount > 0) {
+    if (branch._count.products > 0 || branch._count.employees > 0) {
       throw new AppError("Cannot delete branch with associated products or employees", 400);
     }
 
-    // Soft delete
     await prisma.branch.update({
       where: { id: parseInt(id) },
       data: { deletedAt: new Date() }

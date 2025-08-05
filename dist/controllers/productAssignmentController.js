@@ -16,9 +16,8 @@ const db_1 = __importDefault(require("../database/db"));
 const client_1 = require("@prisma/client");
 async function assignProduct(req, res) {
     const { productId, employeeId, expectedReturnAt, notes } = req.body;
-    console.log(req.user);
     const assignedById = req.user?.userId;
-    // Validate required fie  lds
+    // Validate required fields
     if (!assignedById) {
         res.status(401).json({ success: false, message: "Authentication required" });
         return;
@@ -28,62 +27,84 @@ async function assignProduct(req, res) {
         return;
     }
     try {
-        // Verify product exists, is not deleted, and not already assigned
-        const product = await db_1.default.product.findFirst({
-            where: { id: productId },
-            include: {
-                assignments: {
-                    where: {
-                        status: "ASSIGNED",
-                        returnedAt: null
-                    }
+        // Use transaction to ensure data consistency
+        const result = await db_1.default.$transaction(async (tx) => {
+            // Check for existing active assignment
+            const existingAssignment = await tx.productAssignment.findFirst({
+                where: {
+                    productId,
+                    returnedAt: null
                 }
-            }
-        });
-        if (!product) {
-            res.status(404).json({ success: false, message: "Product not found or is deleted" });
-            return;
-        }
-        if (product.assignments.length > 0) {
-            res.status(400).json({ success: false, message: "Product is already assigned to someone" });
-            return;
-        }
-        // Verify employee exists and is not deleted
-        const employee = await db_1.default.employee.findFirst({
-            where: { id: employeeId }
-        });
-        if (!employee) {
-            res.status(404).json({ success: false, message: "Employee not found or is deleted" });
-            return;
-        }
-        // Validate expected return date if provided
-        if (expectedReturnAt && new Date(expectedReturnAt) < new Date()) {
-            res.status(400).json({
-                success: false,
-                message: "Expected return date cannot be in the past"
             });
-        }
-        const assignment = await db_1.default.productAssignment.create({
-            data: {
-                productId,
-                employeeId,
-                assignedById: parseInt(assignedById),
-                expectedReturnAt: expectedReturnAt ? new Date(expectedReturnAt) : null,
-                notes,
-                status: "ASSIGNED"
-            },
-            include: {
-                product: {
-                    include: {
-                        category: true,
-                        branch: true
+            if (existingAssignment) {
+                // If assigning to same employee, update the existing assignment
+                if (existingAssignment.employeeId === employeeId) {
+                    return await tx.productAssignment.update({
+                        where: { id: existingAssignment.id },
+                        data: {
+                            expectedReturnAt: expectedReturnAt ? new Date(expectedReturnAt) : null,
+                            notes,
+                            assignedById: parseInt(assignedById),
+                            assignedAt: new Date() // Refresh assignment date
+                        },
+                        include: {
+                            product: true,
+                            employee: true,
+                            assignedBy: true
+                        }
+                    });
+                }
+                // If assigning to different employee, first return the existing assignment
+                await tx.productAssignment.update({
+                    where: { id: existingAssignment.id },
+                    data: {
+                        status: "RETURNED",
+                        returnedAt: new Date(),
+                        notes: "Automatically returned for re-assignment"
                     }
-                },
-                employee: true,
-                assignedBy: true
+                });
             }
+            // Verify product exists and is not deleted
+            const product = await tx.product.findFirst({
+                where: { id: productId, deletedAt: null }
+            });
+            if (!product) {
+                throw new errorHandler_1.AppError("Product not found or is deleted", 404);
+            }
+            // Verify employee exists and is not deleted
+            const employee = await tx.employee.findFirst({
+                where: { id: employeeId, deletedAt: null }
+            });
+            if (!employee) {
+                throw new errorHandler_1.AppError("Employee not found or is deleted", 404);
+            }
+            // Validate expected return date if provided
+            if (expectedReturnAt && new Date(expectedReturnAt) < new Date()) {
+                throw new errorHandler_1.AppError("Expected return date cannot be in the past", 400);
+            }
+            // Create new assignment
+            return await tx.productAssignment.create({
+                data: {
+                    productId,
+                    employeeId,
+                    assignedById: parseInt(assignedById),
+                    expectedReturnAt: expectedReturnAt ? new Date(expectedReturnAt) : null,
+                    notes,
+                    status: "ASSIGNED"
+                },
+                include: {
+                    product: {
+                        include: {
+                            category: true,
+                            branch: true
+                        }
+                    },
+                    employee: true,
+                    assignedBy: true
+                }
+            });
         });
-        res.status(201).json({ success: true, data: assignment });
+        res.status(201).json({ success: true, data: result });
         return;
     }
     catch (error) {
@@ -104,25 +125,39 @@ async function assignProduct(req, res) {
                 return;
             }
         }
+        if (error instanceof errorHandler_1.AppError) {
+            res.status(error.statusCode).json({
+                success: false,
+                message: error.message
+            });
+            return;
+        }
         res.status(500).json({
             success: false,
             message: "Failed to assign product",
-            error: undefined
+            error: error instanceof Error ? error.message : undefined
         });
         return;
     }
 }
 async function returnProduct(req, res) {
+    const { assignmentId } = req.params;
+    const { condition, notes } = req.body;
     try {
-        const { assignmentId } = req.params;
-        const { condition, notes } = req.body;
         const assignment = await db_1.default.productAssignment.findUnique({
-            where: { id: parseInt(assignmentId) }
+            where: { id: parseInt(assignmentId) },
+            include: {
+                product: true,
+                employee: true
+            }
         });
-        if (!assignment)
-            throw new errorHandler_1.AppError("Assignment not found", 404);
-        if (assignment.status === "RETURNED") {
-            throw new errorHandler_1.AppError("Product already returned", 400);
+        if (!assignment) {
+            res.status(404).json({ success: false, message: "Assignment not found" });
+            return;
+        }
+        if (assignment.returnedAt) {
+            res.status(400).json({ success: false, message: "Product already returned" });
+            return;
         }
         const updatedAssignment = await db_1.default.productAssignment.update({
             where: { id: parseInt(assignmentId) },
@@ -130,7 +165,7 @@ async function returnProduct(req, res) {
                 status: "RETURNED",
                 returnedAt: new Date(),
                 condition: condition || null,
-                notes: notes || assignment.notes
+                notes: notes || `Returned by ${req.user?.username}`
             },
             include: {
                 product: true,
@@ -138,59 +173,68 @@ async function returnProduct(req, res) {
                 assignedBy: true
             }
         });
-        res.json({ success: true, data: updatedAssignment });
+        res.json({
+            success: true,
+            data: updatedAssignment,
+            message: "Product returned successfully"
+        });
+        return;
     }
     catch (error) {
-        throw error;
+        console.error('Return error:', error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to return product",
+            error: error instanceof Error ? error.message : undefined
+        });
+        return;
     }
 }
 async function getActiveAssignments(req, res) {
     try {
-        // Optional query parameters for pagination
         const { page = 1, limit = 10 } = req.query;
         const pageNumber = Number(page);
         const limitNumber = Number(limit);
-        // Validate pagination parameters
-        if (isNaN(pageNumber)) {
-            res.status(400).json({
-                success: false,
-                message: "Invalid page number"
-            });
-            return;
-        }
-        if (isNaN(limitNumber)) {
-            res.status(400).json({
-                success: false,
-                message: "Invalid limit value"
-            });
-            return;
-        }
         const [assignments, total] = await db_1.default.$transaction([
             db_1.default.productAssignment.findMany({
                 where: {
-                    status: "ASSIGNED",
-                    returnedAt: null // Only filter by these fields
+                    returnedAt: null,
+                    status: 'ASSIGNED'
                 },
                 include: {
                     product: {
-                        include: {
+                        select: {
+                            id: true,
+                            name: true,
+                            model: true,
                             category: true,
                             branch: true
                         }
                     },
-                    employee: true,
-                    assignedBy: true
+                    employee: {
+                        select: {
+                            id: true,
+                            name: true,
+                            empId: true
+                        }
+                    },
+                    assignedBy: {
+                        select: {
+                            id: true,
+                            username: true
+                        }
+                    }
                 },
                 orderBy: {
-                    assignedAt: "desc"
+                    assignedAt: 'desc'
                 },
                 skip: (pageNumber - 1) * limitNumber,
                 take: limitNumber
             }),
             db_1.default.productAssignment.count({
                 where: {
-                    status: "ASSIGNED",
-                    returnedAt: null // Only filter by these fields
+                    returnedAt: null,
+                    status: 'ASSIGNED'
                 }
             })
         ]);
@@ -204,44 +248,78 @@ async function getActiveAssignments(req, res) {
                 totalPages: Math.ceil(total / limitNumber)
             }
         });
-        return;
     }
     catch (error) {
         console.error('Error fetching active assignments:', error);
-        if (error instanceof client_1.Prisma.PrismaClientKnownRequestError) {
-            res.status(400).json({
-                success: false,
-                message: "Database error occurred"
-            });
-            return;
-        }
-        res.status(500).json({
-            success: false,
-            message: "Failed to fetch active assignments",
-            error: undefined
-        });
-        return;
+        throw new errorHandler_1.AppError("Failed to fetch active assignments", 500);
     }
 }
-async function getAssignmentHistory(_req, res) {
+async function getAssignmentHistory(req, res) {
     try {
-        const assignments = await db_1.default.productAssignment.findMany({
-            where: {
-                NOT: {
-                    returnedAt: null
-                }
-            },
-            include: {
-                product: true,
-                employee: true
-            },
-            orderBy: {
-                returnedAt: "desc"
+        const { page = 1, limit = 10, fromDate, toDate } = req.query;
+        const pageNumber = Number(page);
+        const limitNumber = Number(limit);
+        const where = {
+            NOT: { returnedAt: null }
+        };
+        if (fromDate || toDate) {
+            where.assignedAt = {};
+            if (fromDate)
+                where.assignedAt.gte = new Date(fromDate);
+            if (toDate)
+                where.assignedAt.lte = new Date(toDate);
+        }
+        const [assignments, total] = await db_1.default.$transaction([
+            db_1.default.productAssignment.findMany({
+                where,
+                include: {
+                    product: {
+                        select: {
+                            id: true,
+                            name: true,
+                            model: true,
+                            category: true,
+                            branch: true
+                        }
+                    },
+                    employee: {
+                        select: {
+                            id: true,
+                            name: true,
+                            empId: true
+                        }
+                    },
+                    assignedBy: {
+                        select: {
+                            id: true,
+                            username: true
+                        }
+                    }
+                },
+                orderBy: {
+                    assignedAt: 'desc'
+                },
+                skip: (pageNumber - 1) * limitNumber,
+                take: limitNumber
+            }),
+            db_1.default.productAssignment.count({ where })
+        ]);
+        res.json({
+            success: true,
+            data: assignments.map(assignment => ({
+                ...assignment,
+                status: assignment.returnedAt ? 'RETURNED' : assignment.status
+            })),
+            pagination: {
+                total,
+                page: pageNumber,
+                limit: limitNumber,
+                totalPages: Math.ceil(total / limitNumber)
             }
         });
-        res.json({ success: true, data: assignments });
     }
     catch (error) {
+        console.error('Error fetching assignment history:', error);
         throw new errorHandler_1.AppError("Failed to fetch assignment history", 500);
     }
 }

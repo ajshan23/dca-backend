@@ -13,14 +13,23 @@ const db_1 = __importDefault(require("../database/db"));
 async function createBranch(req, res) {
     try {
         const { name } = req.body;
+        if (!name)
+            throw new errorHandler_1.AppError("Branch name is required", 400);
         const existingBranch = await db_1.default.branch.findFirst({
-            where: { name, deletedAt: null }
+            where: {
+                name: { equals: name },
+                deletedAt: null
+            }
         });
-        if (existingBranch) {
-            throw new errorHandler_1.AppError("Branch name is already taken", 409);
-        }
+        if (existingBranch)
+            throw new errorHandler_1.AppError("Branch name already exists", 409);
         const branch = await db_1.default.branch.create({
-            data: { name }
+            data: { name },
+            select: {
+                id: true,
+                name: true,
+                createdAt: true
+            }
         });
         res.status(201).json({ success: true, data: branch });
     }
@@ -28,10 +37,29 @@ async function createBranch(req, res) {
         throw error;
     }
 }
-async function getAllBranches(_req, res) {
+async function getAllBranches(req, res) {
     try {
+        const { search } = req.query;
+        const where = { deletedAt: null };
+        if (search) {
+            where.name = { contains: search, mode: 'insensitive' };
+        }
         const branches = await db_1.default.branch.findMany({
-            where: { deletedAt: null }
+            where,
+            select: {
+                id: true,
+                name: true,
+                createdAt: true,
+                _count: {
+                    select: {
+                        products: true,
+                        employees: true
+                    }
+                }
+            },
+            orderBy: {
+                name: 'asc'
+            }
         });
         res.json({ success: true, data: branches });
     }
@@ -41,8 +69,26 @@ async function getAllBranches(_req, res) {
 }
 async function getBranchById(req, res) {
     try {
-        const branch = await db_1.default.branch.findFirst({
-            where: { id: parseInt(req.params.id), deletedAt: null }
+        const branch = await db_1.default.branch.findUnique({
+            where: { id: parseInt(req.params.id) },
+            select: {
+                id: true,
+                name: true,
+                createdAt: true,
+                updatedAt: true,
+                products: {
+                    select: {
+                        id: true,
+                        name: true
+                    }
+                },
+                employees: {
+                    select: {
+                        id: true,
+                        name: true
+                    }
+                }
+            }
         });
         if (!branch)
             throw new errorHandler_1.AppError("Branch not found", 404);
@@ -56,25 +102,31 @@ async function updateBranch(req, res) {
     try {
         const { id } = req.params;
         const { name } = req.body;
-        const branch = await db_1.default.branch.findFirst({
-            where: { id: parseInt(id), deletedAt: null }
+        if (!name)
+            throw new errorHandler_1.AppError("Branch name is required", 400);
+        const branch = await db_1.default.branch.findUnique({
+            where: { id: parseInt(id) }
         });
         if (!branch)
             throw new errorHandler_1.AppError("Branch not found", 404);
-        if (name && name !== branch.name) {
+        if (name !== branch.name) {
             const existingBranch = await db_1.default.branch.findFirst({
-                where: { name, deletedAt: null }
+                where: {
+                    name: { equals: name },
+                    deletedAt: null
+                }
             });
-            if (existingBranch) {
-                throw new errorHandler_1.AppError("Branch name is already taken", 409);
-            }
-            await db_1.default.branch.update({
-                where: { id: parseInt(id) },
-                data: { name }
-            });
+            if (existingBranch)
+                throw new errorHandler_1.AppError("Branch name already exists", 409);
         }
-        const updatedBranch = await db_1.default.branch.findUnique({
-            where: { id: parseInt(id) }
+        const updatedBranch = await db_1.default.branch.update({
+            where: { id: parseInt(id) },
+            data: { name },
+            select: {
+                id: true,
+                name: true,
+                updatedAt: true
+            }
         });
         res.json({ success: true, data: updatedBranch });
     }
@@ -85,24 +137,22 @@ async function updateBranch(req, res) {
 async function deleteBranch(req, res) {
     try {
         const { id } = req.params;
-        const branch = await db_1.default.branch.findFirst({
-            where: { id: parseInt(id), deletedAt: null }
+        const branch = await db_1.default.branch.findUnique({
+            where: { id: parseInt(id) },
+            include: {
+                _count: {
+                    select: {
+                        products: true,
+                        employees: true
+                    }
+                }
+            }
         });
         if (!branch)
             throw new errorHandler_1.AppError("Branch not found", 404);
-        // Check if branch has products or employees
-        const [productsCount, employeesCount] = await Promise.all([
-            db_1.default.product.count({
-                where: { branchId: parseInt(id), deletedAt: null }
-            }),
-            db_1.default.employee.count({
-                where: { branchId: parseInt(id), deletedAt: null }
-            })
-        ]);
-        if (productsCount > 0 || employeesCount > 0) {
+        if (branch._count.products > 0 || branch._count.employees > 0) {
             throw new errorHandler_1.AppError("Cannot delete branch with associated products or employees", 400);
         }
-        // Soft delete
         await db_1.default.branch.update({
             where: { id: parseInt(id) },
             data: { deletedAt: new Date() }

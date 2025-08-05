@@ -19,14 +19,14 @@ const router = express.Router();
 router.post(
   "/assign",
   authenticateJWT,
-  authorizeRoles(UserRole.ADMIN, UserRole.SUPER_ADMIN),
+  authorizeRoles(UserRole.ADMIN, UserRole.SUPER_ADMIN,UserRole.USER),
   assignProduct
 );
 
 router.post(
   "/bulk-assign",
   authenticateJWT,
-  authorizeRoles(UserRole.ADMIN, UserRole.SUPER_ADMIN),
+  authorizeRoles(UserRole.ADMIN, UserRole.SUPER_ADMIN,UserRole.USER),
   bulkAssignProducts
 );
 // Add this to your productAssignmentRoutes.ts
@@ -38,7 +38,7 @@ router.get(
 router.post(
   "/return/:assignmentId",
   authenticateJWT,
-  authorizeRoles(UserRole.ADMIN, UserRole.SUPER_ADMIN),
+  authorizeRoles(UserRole.ADMIN, UserRole.SUPER_ADMIN,UserRole.USER),
   returnProduct
 );
 

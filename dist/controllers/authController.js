@@ -18,22 +18,17 @@ async function login(req, res) {
             throw new errorHandler_1.AppError("Username and password are required", 400);
         }
         const user = await db_1.default.user.findFirst({
-            where: { username, deletedAt: null },
-            select: {
-                id: true,
-                username: true,
-                passwordHash: true,
-                role: true
+            where: {
+                username: { equals: username },
+                deletedAt: null
             }
         });
-        if (!user) {
+        if (!user)
             throw new errorHandler_1.AppError("Invalid credentials", 401);
-        }
         const isMatch = await bcryptjs_1.default.compare(password, user.passwordHash);
-        if (!isMatch) {
+        if (!isMatch)
             throw new errorHandler_1.AppError("Invalid credentials", 401);
-        }
-        const token = jsonwebtoken_1.default.sign({ userId: user.id, role: user.role }, process.env.JWT_SECRET || "your-secret-your_secure_jwt_secret_32chars_min", { expiresIn: "1d" });
+        const token = jsonwebtoken_1.default.sign({ userId: user.id, role: user.role }, "your_secure_jwt_secret_32chars_min", { expiresIn: '180d' });
         res.json({
             success: true,
             data: {
@@ -52,31 +47,24 @@ async function login(req, res) {
 }
 async function createUser(req, res) {
     try {
-        if (!req.user) {
-            throw new errorHandler_1.AppError("Authentication required", 401);
-        }
-        const currentUser = req.user;
-        const { username, password, role = "USER" } = req.body;
-        // Validate input
+        const { username, password, role = "user" } = req.body;
         if (!username || !password) {
             throw new errorHandler_1.AppError("Username and password are required", 400);
         }
         if (password.length < 8) {
             throw new errorHandler_1.AppError("Password must be at least 8 characters", 400);
         }
-        // Check permissions
-        if (role === "ADMIN" && currentUser.role !== "SUPER_ADMIN") {
-            throw new errorHandler_1.AppError("Only super admin can create admin", 403);
-        }
-        if (role === "SUPER_ADMIN") {
-            throw new errorHandler_1.AppError("Cannot create super admin via API", 403);
+        if (role === 'super_admin' && req.user?.role !== 'super_admin') {
+            throw new errorHandler_1.AppError("Only super admin can create super admin users", 403);
         }
         const existingUser = await db_1.default.user.findFirst({
-            where: { username, deletedAt: null }
+            where: {
+                username: { equals: username },
+                deletedAt: null
+            }
         });
-        if (existingUser) {
-            throw new errorHandler_1.AppError("Username is already taken", 409);
-        }
+        if (existingUser)
+            throw new errorHandler_1.AppError("Username already exists", 409);
         const hashedPassword = await bcryptjs_1.default.hash(password, BCRYPT_SALT_ROUNDS);
         const user = await db_1.default.user.create({
             data: {
@@ -94,6 +82,9 @@ async function createUser(req, res) {
         res.status(201).json({ success: true, data: user });
     }
     catch (error) {
+        if (error instanceof Error && error.message.includes('Unique constraint')) {
+            throw new errorHandler_1.AppError("Username already exists", 409);
+        }
         throw error;
     }
 }
@@ -101,35 +92,36 @@ async function updateUser(req, res) {
     try {
         const { id } = req.params;
         const { username, password, role } = req.body;
-        const user = await db_1.default.user.findFirst({
-            where: { id: parseInt(id), deletedAt: null }
+        const user = await db_1.default.user.findUnique({
+            where: { id: parseInt(id) }
         });
-        if (!user) {
+        if (!user)
             throw new errorHandler_1.AppError("User not found", 404);
-        }
-        // Prevent editing super_admin unless current user is super_admin
-        if (user.role === "SUPER_ADMIN" &&
-            req.user?.role !== "SUPER_ADMIN") {
-            throw new errorHandler_1.AppError("Cannot modify super admin", 403);
+        // Prevent privilege escalation
+        if (role && role !== user.role) {
+            if (req.user?.role !== 'super_admin') {
+                throw new errorHandler_1.AppError("Only super admin can change roles", 403);
+            }
+            if (user.role === 'super_admin') {
+                throw new errorHandler_1.AppError("Cannot modify super admin role", 403);
+            }
         }
         const updateData = {};
         if (username && username !== user.username) {
             const existingUser = await db_1.default.user.findFirst({
-                where: { username, deletedAt: null }
+                where: {
+                    username: { equals: username },
+                    deletedAt: null
+                }
             });
-            if (existingUser) {
-                throw new errorHandler_1.AppError("Username already taken", 409);
-            }
+            if (existingUser)
+                throw new errorHandler_1.AppError("Username already exists", 409);
             updateData.username = username;
         }
         if (password) {
             updateData.passwordHash = await bcryptjs_1.default.hash(password, BCRYPT_SALT_ROUNDS);
         }
-        if (role && role !== user.role) {
-            // Only super admin can change roles to admin
-            if (role === "ADMIN" && req.user?.role !== "SUPER_ADMIN") {
-                throw new errorHandler_1.AppError("Only super admin can assign admin role", 403);
-            }
+        if (role) {
             updateData.role = role;
         }
         const updatedUser = await db_1.default.user.update({

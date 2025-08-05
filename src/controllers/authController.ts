@@ -4,7 +4,6 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import prisma from "../database/db";
 
-
 const BCRYPT_SALT_ROUNDS = 12;
 
 export async function login(req: Request, res: Response) {
@@ -16,34 +15,30 @@ export async function login(req: Request, res: Response) {
     }
 
     const user = await prisma.user.findFirst({
-      where: { username, deletedAt: null },
-      select: {
-        id: true,
-        username: true,
-        passwordHash: true,
-        role: true
+      where: { 
+        username: { equals: username },
+        deletedAt: null 
       }
     });
 
-    if (!user) {
-      throw new AppError("Invalid credentials", 401);
-    }
+    if (!user) throw new AppError("Invalid credentials", 401);
 
     const isMatch = await bcrypt.compare(password, user.passwordHash);
-    if (!isMatch) {
-      throw new AppError("Invalid credentials", 401);
-    }
+    if (!isMatch) throw new AppError("Invalid credentials", 401);
 
     const token = jwt.sign(
       { userId: user.id, role: user.role },
-      process.env.JWT_SECRET || "your-secret-your_secure_jwt_secret_32chars_min",
-      { expiresIn: "1d" }
+      "your_secure_jwt_secret_32chars_min",
+      { expiresIn: '180d' }
     );
+
+  
 
     res.json({
       success: true,
       data: {
         token,
+       
         user: {
           id: user.id,
           username: user.username,
@@ -58,14 +53,8 @@ export async function login(req: Request, res: Response) {
 
 export async function createUser(req: Request, res: Response) {
   try {
-    if (!req.user) {
-      throw new AppError("Authentication required", 401);
-    }
+    const { username, password, role = "user" } = req.body;
 
-    const currentUser = req.user;
-    const { username, password, role = "USER" } = req.body;
-
-    // Validate input
     if (!username || !password) {
       throw new AppError("Username and password are required", 400);
     }
@@ -74,21 +63,18 @@ export async function createUser(req: Request, res: Response) {
       throw new AppError("Password must be at least 8 characters", 400);
     }
 
-    // Check permissions
-    if (role === "ADMIN" && currentUser.role !== "SUPER_ADMIN") {
-      throw new AppError("Only super admin can create admin", 403);
-    }
-
-    if (role === "SUPER_ADMIN") {
-      throw new AppError("Cannot create super admin via API", 403);
+    if (role === 'super_admin' && req.user?.role !== 'super_admin') {
+      throw new AppError("Only super admin can create super admin users", 403);
     }
 
     const existingUser = await prisma.user.findFirst({
-      where: { username, deletedAt: null }
+      where: { 
+        username: { equals: username },
+        deletedAt: null 
+      }
     });
-    if (existingUser) {
-      throw new AppError("Username is already taken", 409);
-    }
+
+    if (existingUser) throw new AppError("Username already exists", 409);
 
     const hashedPassword = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
 
@@ -108,6 +94,9 @@ export async function createUser(req: Request, res: Response) {
 
     res.status(201).json({ success: true, data: user });
   } catch (error) {
+    if (error instanceof Error && error.message.includes('Unique constraint')) {
+      throw new AppError("Username already exists", 409);
+    }
     throw error;
   }
 }
@@ -117,34 +106,36 @@ export async function updateUser(req: Request, res: Response) {
     const { id } = req.params;
     const { username, password, role } = req.body;
 
-    const user = await prisma.user.findFirst({
-      where: { id: parseInt(id), deletedAt: null }
+    const user = await prisma.user.findUnique({
+      where: { id: parseInt(id) }
     });
-    if (!user) {
-      throw new AppError("User not found", 404);
-    }
 
-    // Prevent editing super_admin unless current user is super_admin
-    if (
-      user.role === "SUPER_ADMIN" &&
-      req.user?.role !== "SUPER_ADMIN"
-    ) {
-      throw new AppError("Cannot modify super admin", 403);
+    if (!user) throw new AppError("User not found", 404);
+
+    // Prevent privilege escalation
+    if (role && role !== user.role) {
+      if (req.user?.role !== 'super_admin') {
+        throw new AppError("Only super admin can change roles", 403);
+      }
+      if (user.role === 'super_admin') {
+        throw new AppError("Cannot modify super admin role", 403);
+      }
     }
 
     const updateData: {
       username?: string;
       passwordHash?: string;
-      role?: "ADMIN" | "USER"; // SUPER_ADMIN can't be set via API
+      role?: string;
     } = {};
 
     if (username && username !== user.username) {
       const existingUser = await prisma.user.findFirst({
-        where: { username, deletedAt: null }
+        where: { 
+          username: { equals: username },
+          deletedAt: null 
+        }
       });
-      if (existingUser) {
-        throw new AppError("Username already taken", 409);
-      }
+      if (existingUser) throw new AppError("Username already exists", 409);
       updateData.username = username;
     }
 
@@ -152,11 +143,7 @@ export async function updateUser(req: Request, res: Response) {
       updateData.passwordHash = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
     }
 
-    if (role && role !== user.role) {
-      // Only super admin can change roles to admin
-      if (role === "ADMIN" && req.user?.role !== "SUPER_ADMIN") {
-        throw new AppError("Only super admin can assign admin role", 403);
-      }
+    if (role) {
       updateData.role = role;
     }
 

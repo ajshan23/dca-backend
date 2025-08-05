@@ -13,14 +13,24 @@ const db_1 = __importDefault(require("../database/db"));
 async function createDepartment(req, res) {
     try {
         const { name, description } = req.body;
-        const existingDepartment = await db_1.default.department.findFirst({
-            where: { name, deletedAt: null }
+        if (!name)
+            throw new errorHandler_1.AppError("Department name is required", 400);
+        const existingDept = await db_1.default.department.findFirst({
+            where: {
+                name: { equals: name },
+                deletedAt: null
+            }
         });
-        if (existingDepartment) {
-            throw new errorHandler_1.AppError("Department name is already taken", 409);
-        }
+        if (existingDept)
+            throw new errorHandler_1.AppError("Department already exists", 409);
         const department = await db_1.default.department.create({
-            data: { name, description }
+            data: { name, description },
+            select: {
+                id: true,
+                name: true,
+                description: true,
+                createdAt: true
+            }
         });
         res.status(201).json({ success: true, data: department });
     }
@@ -28,10 +38,32 @@ async function createDepartment(req, res) {
         throw error;
     }
 }
-async function getAllDepartments(_req, res) {
+async function getAllDepartments(req, res) {
     try {
+        const { search } = req.query;
+        const where = { deletedAt: null };
+        if (search) {
+            where.OR = [
+                { name: { contains: search, mode: 'insensitive' } },
+                { description: { contains: search, mode: 'insensitive' } }
+            ];
+        }
         const departments = await db_1.default.department.findMany({
-            where: { deletedAt: null }
+            where,
+            select: {
+                id: true,
+                name: true,
+                description: true,
+                createdAt: true,
+                _count: {
+                    select: {
+                        products: true
+                    }
+                }
+            },
+            orderBy: {
+                name: 'asc'
+            }
         });
         res.json({ success: true, data: departments });
     }
@@ -41,8 +73,22 @@ async function getAllDepartments(_req, res) {
 }
 async function getDepartmentById(req, res) {
     try {
-        const department = await db_1.default.department.findFirst({
-            where: { id: parseInt(req.params.id), deletedAt: null }
+        const department = await db_1.default.department.findUnique({
+            where: { id: parseInt(req.params.id) },
+            select: {
+                id: true,
+                name: true,
+                description: true,
+                createdAt: true,
+                updatedAt: true,
+                products: {
+                    select: {
+                        id: true,
+                        name: true,
+                        model: true
+                    }
+                }
+            }
         });
         if (!department)
             throw new errorHandler_1.AppError("Department not found", 404);
@@ -56,27 +102,32 @@ async function updateDepartment(req, res) {
     try {
         const { id } = req.params;
         const { name, description } = req.body;
-        const department = await db_1.default.department.findFirst({
-            where: { id: parseInt(id), deletedAt: null }
+        if (!name)
+            throw new errorHandler_1.AppError("Department name is required", 400);
+        const department = await db_1.default.department.findUnique({
+            where: { id: parseInt(id) }
         });
         if (!department)
             throw new errorHandler_1.AppError("Department not found", 404);
-        const updateData = {};
-        if (name && name !== department.name) {
-            const existingDepartment = await db_1.default.department.findFirst({
-                where: { name, deletedAt: null }
+        if (name !== department.name) {
+            const existingDept = await db_1.default.department.findFirst({
+                where: {
+                    name: { equals: name },
+                    deletedAt: null
+                }
             });
-            if (existingDepartment) {
-                throw new errorHandler_1.AppError("Department name is already taken", 409);
-            }
-            updateData.name = name;
-        }
-        if (description) {
-            updateData.description = description;
+            if (existingDept)
+                throw new errorHandler_1.AppError("Department name already exists", 409);
         }
         const updatedDepartment = await db_1.default.department.update({
             where: { id: parseInt(id) },
-            data: updateData
+            data: { name, description },
+            select: {
+                id: true,
+                name: true,
+                description: true,
+                updatedAt: true
+            }
         });
         res.json({ success: true, data: updatedDepartment });
     }
@@ -87,19 +138,21 @@ async function updateDepartment(req, res) {
 async function deleteDepartment(req, res) {
     try {
         const { id } = req.params;
-        const department = await db_1.default.department.findFirst({
-            where: { id: parseInt(id), deletedAt: null }
+        const department = await db_1.default.department.findUnique({
+            where: { id: parseInt(id) },
+            include: {
+                _count: {
+                    select: {
+                        products: true
+                    }
+                }
+            }
         });
         if (!department)
             throw new errorHandler_1.AppError("Department not found", 404);
-        // Check if department has products
-        const productsCount = await db_1.default.product.count({
-            where: { departmentId: parseInt(id), deletedAt: null }
-        });
-        if (productsCount > 0) {
-            throw new errorHandler_1.AppError("Cannot delete department with associated products ", 400);
+        if (department._count.products > 0) {
+            throw new errorHandler_1.AppError("Cannot delete department with associated products", 400);
         }
-        // Soft delete
         await db_1.default.department.update({
             where: { id: parseInt(id) },
             data: { deletedAt: new Date() }

@@ -6,16 +6,25 @@ export async function createDepartment(req: Request, res: Response) {
   try {
     const { name, description } = req.body;
 
-    const existingDepartment = await prisma.department.findFirst({
-      where: { name, deletedAt: null }
+    if (!name) throw new AppError("Department name is required", 400);
+
+    const existingDept = await prisma.department.findFirst({
+      where: { 
+        name: { equals: name },
+        deletedAt: null 
+      }
     });
 
-    if (existingDepartment) {
-      throw new AppError("Department name is already taken", 409);
-    }
+    if (existingDept) throw new AppError("Department already exists", 409);
 
     const department = await prisma.department.create({
-      data: { name, description }
+      data: { name, description },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        createdAt: true
+      }
     });
 
     res.status(201).json({ success: true, data: department });
@@ -24,11 +33,37 @@ export async function createDepartment(req: Request, res: Response) {
   }
 }
 
-export async function getAllDepartments(_req: Request, res: Response) {
+export async function getAllDepartments(req: Request, res: Response) {
   try {
+    const { search } = req.query;
+    
+    const where: any = { deletedAt: null };
+    
+    if (search) {
+      where.OR = [
+        { name: { contains: search as string, mode: 'insensitive' } },
+        { description: { contains: search as string, mode: 'insensitive' } }
+      ];
+    }
+
     const departments = await prisma.department.findMany({
-      where: { deletedAt: null }
+      where,
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        createdAt: true,
+        _count: {
+          select: {
+            products: true
+          }
+        }
+      },
+      orderBy: {
+        name: 'asc'
+      }
     });
+
     res.json({ success: true, data: departments });
   } catch (error) {
     throw new AppError("Failed to fetch departments", 500);
@@ -37,10 +72,24 @@ export async function getAllDepartments(_req: Request, res: Response) {
 
 export async function getDepartmentById(req: Request, res: Response) {
   try {
-    const department = await prisma.department.findFirst({
-      where: { id: parseInt(req.params.id), deletedAt: null }
+    const department = await prisma.department.findUnique({
+      where: { id: parseInt(req.params.id) },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        createdAt: true,
+        updatedAt: true,
+        products: {
+          select: {
+            id: true,
+            name: true,
+            model: true
+          }
+        }
+      }
     });
-    
+
     if (!department) throw new AppError("Department not found", 404);
     
     res.json({ success: true, data: department });
@@ -54,31 +103,33 @@ export async function updateDepartment(req: Request, res: Response) {
     const { id } = req.params;
     const { name, description } = req.body;
 
-    const department = await prisma.department.findFirst({
-      where: { id: parseInt(id), deletedAt: null }
+    if (!name) throw new AppError("Department name is required", 400);
+
+    const department = await prisma.department.findUnique({
+      where: { id: parseInt(id) }
     });
     
     if (!department) throw new AppError("Department not found", 404);
 
-    const updateData: { name?: string; description?: string } = {};
-
-    if (name && name !== department.name) {
-      const existingDepartment = await prisma.department.findFirst({
-        where: { name, deletedAt: null }
+    if (name !== department.name) {
+      const existingDept = await prisma.department.findFirst({
+        where: { 
+          name: { equals: name },
+          deletedAt: null 
+        }
       });
-      if (existingDepartment) {
-        throw new AppError("Department name is already taken", 409);
-      }
-      updateData.name = name;
-    }
-
-    if (description) {
-      updateData.description = description;
+      if (existingDept) throw new AppError("Department name already exists", 409);
     }
 
     const updatedDepartment = await prisma.department.update({
       where: { id: parseInt(id) },
-      data: updateData
+      data: { name, description },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        updatedAt: true
+      }
     });
 
     res.json({ success: true, data: updatedDepartment });
@@ -90,24 +141,24 @@ export async function updateDepartment(req: Request, res: Response) {
 export async function deleteDepartment(req: Request, res: Response) {
   try {
     const { id } = req.params;
-    const department = await prisma.department.findFirst({
-      where: { id: parseInt(id), deletedAt: null }
+
+    const department = await prisma.department.findUnique({
+      where: { id: parseInt(id) },
+      include: {
+        _count: {
+          select: {
+            products: true
+          }
+        }
+      }
     });
     
     if (!department) throw new AppError("Department not found", 404);
 
-    // Check if department has products
-    const productsCount = await prisma.product.count({
-      where: { departmentId: parseInt(id), deletedAt: null }
-    });
-
-    
-
-    if (productsCount >  0) {
-      throw new AppError("Cannot delete department with associated products ", 400);
+    if (department._count.products > 0) {
+      throw new AppError("Cannot delete department with associated products", 400);
     }
 
-    // Soft delete
     await prisma.department.update({
       where: { id: parseInt(id) },
       data: { deletedAt: new Date() }

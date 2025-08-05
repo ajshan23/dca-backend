@@ -13,14 +13,24 @@ const db_1 = __importDefault(require("../database/db"));
 async function createCategory(req, res) {
     try {
         const { name, description } = req.body;
+        if (!name)
+            throw new errorHandler_1.AppError("Category name is required", 400);
         const existingCategory = await db_1.default.category.findFirst({
-            where: { name, deletedAt: null }
+            where: {
+                name: { equals: name },
+                deletedAt: null
+            }
         });
-        if (existingCategory) {
-            throw new errorHandler_1.AppError("Category name is already taken", 409);
-        }
+        if (existingCategory)
+            throw new errorHandler_1.AppError("Category name already exists", 409);
         const category = await db_1.default.category.create({
-            data: { name, description }
+            data: { name, description },
+            select: {
+                id: true,
+                name: true,
+                description: true,
+                createdAt: true
+            }
         });
         res.status(201).json({ success: true, data: category });
     }
@@ -28,10 +38,32 @@ async function createCategory(req, res) {
         throw error;
     }
 }
-async function getAllCategories(_req, res) {
+async function getAllCategories(req, res) {
     try {
+        const { search } = req.query;
+        const where = { deletedAt: null };
+        if (search) {
+            where.OR = [
+                { name: { contains: search, mode: 'insensitive' } },
+                { description: { contains: search, mode: 'insensitive' } }
+            ];
+        }
         const categories = await db_1.default.category.findMany({
-            where: { deletedAt: null }
+            where,
+            select: {
+                id: true,
+                name: true,
+                description: true,
+                createdAt: true,
+                _count: {
+                    select: {
+                        products: true
+                    }
+                }
+            },
+            orderBy: {
+                name: 'asc'
+            }
         });
         res.json({ success: true, data: categories });
     }
@@ -41,8 +73,21 @@ async function getAllCategories(_req, res) {
 }
 async function getCategoryById(req, res) {
     try {
-        const category = await db_1.default.category.findFirst({
-            where: { id: parseInt(req.params.id), deletedAt: null }
+        const category = await db_1.default.category.findUnique({
+            where: { id: parseInt(req.params.id) },
+            select: {
+                id: true,
+                name: true,
+                description: true,
+                createdAt: true,
+                updatedAt: true,
+                products: {
+                    select: {
+                        id: true,
+                        name: true
+                    }
+                }
+            }
         });
         if (!category)
             throw new errorHandler_1.AppError("Category not found", 404);
@@ -56,27 +101,32 @@ async function updateCategory(req, res) {
     try {
         const { id } = req.params;
         const { name, description } = req.body;
-        const category = await db_1.default.category.findFirst({
-            where: { id: parseInt(id), deletedAt: null }
+        if (!name)
+            throw new errorHandler_1.AppError("Category name is required", 400);
+        const category = await db_1.default.category.findUnique({
+            where: { id: parseInt(id) }
         });
         if (!category)
             throw new errorHandler_1.AppError("Category not found", 404);
-        const updateData = {};
-        if (name && name !== category.name) {
+        if (name !== category.name) {
             const existingCategory = await db_1.default.category.findFirst({
-                where: { name, deletedAt: null }
+                where: {
+                    name: { equals: name },
+                    deletedAt: null
+                }
             });
-            if (existingCategory) {
-                throw new errorHandler_1.AppError("Category name is already taken", 409);
-            }
-            updateData.name = name;
-        }
-        if (description) {
-            updateData.description = description;
+            if (existingCategory)
+                throw new errorHandler_1.AppError("Category name already exists", 409);
         }
         const updatedCategory = await db_1.default.category.update({
             where: { id: parseInt(id) },
-            data: updateData
+            data: { name, description },
+            select: {
+                id: true,
+                name: true,
+                description: true,
+                updatedAt: true
+            }
         });
         res.json({ success: true, data: updatedCategory });
     }
@@ -87,19 +137,21 @@ async function updateCategory(req, res) {
 async function deleteCategory(req, res) {
     try {
         const { id } = req.params;
-        const category = await db_1.default.category.findFirst({
-            where: { id: parseInt(id), deletedAt: null }
+        const category = await db_1.default.category.findUnique({
+            where: { id: parseInt(id) },
+            include: {
+                _count: {
+                    select: {
+                        products: true
+                    }
+                }
+            }
         });
         if (!category)
             throw new errorHandler_1.AppError("Category not found", 404);
-        // Check if category has products
-        const productsCount = await db_1.default.product.count({
-            where: { categoryId: parseInt(id), deletedAt: null }
-        });
-        if (productsCount > 0) {
+        if (category._count.products > 0) {
             throw new errorHandler_1.AppError("Cannot delete category with associated products", 400);
         }
-        // Soft delete
         await db_1.default.category.update({
             where: { id: parseInt(id) },
             data: { deletedAt: new Date() }

@@ -6,23 +6,23 @@ export async function createEmployee(req: Request, res: Response) {
   try {
     const { empId, name, email, department, position, branchId } = req.body;
 
-    // Check if employee ID is already taken
-    const existingEmployee = await prisma.employee.findFirst({
-      where: { empId, deletedAt: null }
+    if (!empId || !name) throw new AppError("Employee ID and name are required", 400);
+
+    // Check for existing employee ID
+    const existingEmp = await prisma.employee.findFirst({
+      where: { 
+        empId: { equals: empId },
+        deletedAt: null 
+      }
     });
+    if (existingEmp) throw new AppError("Employee ID already exists", 409);
 
-    if (existingEmployee) {
-      throw new AppError("Employee ID is already taken", 409);
-    }
-
-    // If branchId is provided, verify it exists
+    // Validate branch if provided
     if (branchId) {
-      const branch = await prisma.branch.findFirst({
+      const branchExists = await prisma.branch.findFirst({
         where: { id: branchId, deletedAt: null }
       });
-      if (!branch) {
-        throw new AppError("Branch not found", 404);
-      }
+      if (!branchExists) throw new AppError("Branch not found", 404);
     }
 
     const employee = await prisma.employee.create({
@@ -33,6 +33,21 @@ export async function createEmployee(req: Request, res: Response) {
         department,
         position,
         branchId
+      },
+      select: {
+        id: true,
+        empId: true,
+        name: true,
+        email: true,
+        department: true,
+        position: true,
+        branch: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        createdAt: true
       }
     });
 
@@ -44,26 +59,49 @@ export async function createEmployee(req: Request, res: Response) {
 
 export async function getAllEmployees(req: Request, res: Response) {
   try {
-    const { search, branchId } = req.query;
-
+    const { search, branchId, department } = req.query;
+    
     const where: any = { deletedAt: null };
-
+    
     if (search) {
       where.OR = [
-        { name: { contains: search as string } },
-        { empId: { contains: search as string } },
-        { email: { contains: search as string } }
+        { name: { contains: search as string, mode: 'insensitive' } },
+        { empId: { contains: search as string, mode: 'insensitive' } },
+        { email: { contains: search as string, mode: 'insensitive' } }
       ];
     }
 
-    if (branchId) {
-      where.branchId = parseInt(branchId as string);
-    }
+    if (branchId) where.branchId = parseInt(branchId as string);
+    if (department) where.department = { contains: department as string, mode: 'insensitive' };
 
     const employees = await prisma.employee.findMany({
       where,
-      include: {
-        branch: true
+      select: {
+        id: true,
+        empId: true,
+        name: true,
+        email: true,
+        department: true,
+        position: true,
+        branch: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        createdAt: true,
+        _count: {
+          select: {
+            assignments: {
+              where: {
+                returnedAt: null
+              }
+            }
+          }
+        }
+      },
+      orderBy: {
+        name: 'asc'
       }
     });
 
@@ -75,18 +113,42 @@ export async function getAllEmployees(req: Request, res: Response) {
 
 export async function getEmployeeById(req: Request, res: Response) {
   try {
-    const employee = await prisma.employee.findFirst({
-      where: { id: parseInt(req.params.id), deletedAt: null },
-      include: {
-        branch: true,
+    const employee = await prisma.employee.findUnique({
+      where: { id: parseInt(req.params.id) },
+      select: {
+        id: true,
+        empId: true,
+        name: true,
+        email: true,
+        department: true,
+        position: true,
+        branch: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        createdAt: true,
+        updatedAt: true,
         assignments: {
-          include: {
-            product: true
+          where: {
+            returnedAt: null
+          },
+          select: {
+            id: true,
+            product: {
+              select: {
+                id: true,
+                name: true,
+                model: true
+              }
+            },
+            assignedAt: true
           }
         }
       }
     });
-    
+
     if (!employee) throw new AppError("Employee not found", 404);
     
     res.json({ success: true, data: employee });
@@ -100,43 +162,57 @@ export async function updateEmployee(req: Request, res: Response) {
     const { id } = req.params;
     const { empId, name, email, department, position, branchId } = req.body;
 
-    const employee = await prisma.employee.findFirst({
-      where: { id: parseInt(id), deletedAt: null }
+    const employee = await prisma.employee.findUnique({
+      where: { id: parseInt(id) }
     });
     
     if (!employee) throw new AppError("Employee not found", 404);
 
-    const updateData: any = {};
-
-    if (empId && empId !== employee.empId) {
-      const existingEmployee = await prisma.employee.findFirst({
-        where: { empId, deletedAt: null }
-      });
-      if (existingEmployee) {
-        throw new AppError("Employee ID is already taken", 409);
-      }
-      updateData.empId = empId;
-    }
-
-    if (name) updateData.name = name;
-    if (email) updateData.email = email;
-    if (department) updateData.department = department;
-    if (position) updateData.position = position;
+    // Validate branch if provided
     if (branchId) {
-      const branch = await prisma.branch.findFirst({
+      const branchExists = await prisma.branch.findFirst({
         where: { id: branchId, deletedAt: null }
       });
-      if (!branch) {
-        throw new AppError("Branch not found", 404);
-      }
-      updateData.branchId = branchId;
+      if (!branchExists) throw new AppError("Branch not found", 404);
+    }
+
+    const updateData: any = {
+      name: name || employee.name,
+      email: email || employee.email,
+      department: department || employee.department,
+      position: position || employee.position,
+      branchId: branchId || employee.branchId
+    };
+
+    // Check for empId conflict if changed
+    if (empId && empId !== employee.empId) {
+      const existingEmp = await prisma.employee.findFirst({
+        where: { 
+          empId: { equals: empId },
+          deletedAt: null 
+        }
+      });
+      if (existingEmp) throw new AppError("Employee ID already exists", 409);
+      updateData.empId = empId;
     }
 
     const updatedEmployee = await prisma.employee.update({
       where: { id: parseInt(id) },
       data: updateData,
-      include: {
-        branch: true
+      select: {
+        id: true,
+        empId: true,
+        name: true,
+        email: true,
+        department: true,
+        position: true,
+        branch: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        updatedAt: true
       }
     });
 
@@ -149,22 +225,28 @@ export async function updateEmployee(req: Request, res: Response) {
 export async function deleteEmployee(req: Request, res: Response) {
   try {
     const { id } = req.params;
-    const employee = await prisma.employee.findFirst({
-      where: { id: parseInt(id), deletedAt: null }
+
+    const employee = await prisma.employee.findUnique({
+      where: { id: parseInt(id) },
+      include: {
+        _count: {
+          select: {
+            assignments: {
+              where: {
+                returnedAt: null
+              }
+            }
+          }
+        }
+      }
     });
     
     if (!employee) throw new AppError("Employee not found", 404);
 
-    // Check if employee has assignments
-    const assignmentsCount = await prisma.productAssignment.count({
-      where: { employeeId: parseInt(id) }
-    });
-
-    if (assignmentsCount > 0) {
-      throw new AppError("Cannot delete employee with assigned products", 400);
+    if (employee._count.assignments > 0) {
+      throw new AppError("Cannot delete employee with active assignments", 400);
     }
 
-    // Soft delete
     await prisma.employee.update({
       where: { id: parseInt(id) },
       data: { deletedAt: new Date() }

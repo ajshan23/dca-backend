@@ -1,7 +1,6 @@
 import { Request, Response } from "express";
 import { AppError } from "../samples/errorHandler";
 import prisma from "../database/db";
-import { Prisma } from "@prisma/client";
 import QRCode from 'qrcode';
 
 export async function createProduct(req: Request, res: Response) {
@@ -17,35 +16,24 @@ export async function createProduct(req: Request, res: Response) {
       notes 
     } = req.body;
 
-    // Validate required fields
     if (!name || !model || !categoryId || !branchId) {
-      throw new AppError("Missing required fields", 400);
+      throw new AppError("Name, model, category and branch are required", 400);
     }
 
-    // Check if category exists
-    const categoryExists = await prisma.category.findFirst({
-      where: { id: categoryId, deletedAt: null }
-    });
-    if (!categoryExists) {
-      throw new AppError("Category not found", 404);
-    }
+    // Validate references
+    const [category, branch] = await Promise.all([
+      prisma.category.findFirst({ where: { id: categoryId, deletedAt: null } }),
+      prisma.branch.findFirst({ where: { id: branchId, deletedAt: null } })
+    ]);
 
-    // Check if branch exists
-    const branchExists = await prisma.branch.findFirst({
-      where: { id: branchId, deletedAt: null }
-    });
-    if (!branchExists) {
-      throw new AppError("Branch not found", 404);
-    }
+    if (!category) throw new AppError("Category not found", 404);
+    if (!branch) throw new AppError("Branch not found", 404);
 
-    // Check if department exists if provided
     if (departmentId) {
-      const departmentExists = await prisma.department.findFirst({
+      const department = await prisma.department.findFirst({
         where: { id: departmentId, deletedAt: null }
       });
-      if (!departmentExists) {
-        throw new AppError("Department not found", 404);
-      }
+      if (!department) throw new AppError("Department not found", 404);
     }
 
     const product = await prisma.product.create({
@@ -59,29 +47,36 @@ export async function createProduct(req: Request, res: Response) {
         complianceStatus: complianceStatus || false,
         notes
       },
-      include: {
-        category: true,
-        branch: true,
-        department: true
+      select: {
+        id: true,
+        name: true,
+        model: true,
+        category: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        branch: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        department: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        warrantyDate: true,
+        complianceStatus: true,
+        createdAt: true
       }
     });
 
     res.status(201).json({ success: true, data: product });
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      if (error.code === 'P2002') {
-        let field = 'field';
-        if (Array.isArray(error.meta?.target)) {
-          field = error.meta.target[0];
-        } else if (typeof error.meta?.target === 'string') {
-          field = error.meta.target;
-        }
-        throw new AppError(`A product with this ${field} already exists`, 400);
-      }
-      if (error.code === 'P2003') {
-        throw new AppError("Invalid reference ID provided", 400);
-      }
-    }
     throw error;
   }
 }
@@ -91,54 +86,78 @@ export async function getAllProducts(req: Request, res: Response) {
     const { 
       page = 1, 
       limit = 10, 
-      search = '', 
-      includeAssignments,
-      categoryId,
-      branchId,
+      search, 
+      categoryId, 
+      branchId, 
       departmentId,
-      complianceStatus
+      complianceStatus 
     } = req.query;
     
-    const where: Prisma.ProductWhereInput = {
-      OR: [
-        { name: { contains: search as string } },
-        { model: { contains: search as string } }
-      ],
-      deletedAt: null
-    };
+    const where: any = { deletedAt: null };
+    
+    if (search) {
+      where.OR = [
+        { name: { contains: search as string, mode: 'insensitive' } },
+        { model: { contains: search as string, mode: 'insensitive' } }
+      ];
+    }
+    if (categoryId) where.categoryId = parseInt(categoryId as string);
+    if (branchId) where.branchId = parseInt(branchId as string);
+    if (departmentId) where.departmentId = parseInt(departmentId as string);
+    if (complianceStatus) where.complianceStatus = complianceStatus === 'true';
 
-    // Add optional filters
-    if (categoryId) {
-      where.categoryId = parseInt(categoryId as string);
-    }
-    if (branchId) {
-      where.branchId = parseInt(branchId as string);
-    }
-    if (departmentId) {
-      where.departmentId = parseInt(departmentId as string);
-    }
-    if (complianceStatus) {
-      where.complianceStatus = complianceStatus === 'true';
-    }
-
-    const [products, total] = await prisma.$transaction([
+    const [products, total] = await Promise.all([
       prisma.product.findMany({
         skip: (Number(page) - 1) * Number(limit),
         take: Number(limit),
         where,
-        include: {
-          category: true,
-          branch: true,
-          department: true,
-          assignments: includeAssignments === 'true' ? {
+        select: {
+          id: true,
+          name: true,
+          model: true,
+          category: {
+            select: {
+              id: true,
+              name: true
+            }
+          },
+          branch: {
+            select: {
+              id: true,
+              name: true
+            }
+          },
+          department: {
+            select: {
+              id: true,
+              name: true
+            }
+          },
+          warrantyDate: true,
+          complianceStatus: true,
+          createdAt: true,
+          assignments: {
+            select: {
+              id: true,
+              assignedAt: true,
+              expectedReturnAt: true,
+              returnedAt: true,
+              employee: {
+                select: {
+                  id: true,
+                  name: true,
+                  empId: true
+                }
+              }
+            },
             where: {
-              status: 'ASSIGNED',
               returnedAt: null
             },
-            include: {
-              employee: true
-            }
-          } : false
+            orderBy: {
+              assignedAt: 'desc'
+            },
+            take: 1
+          }
         },
         orderBy: {
           createdAt: 'desc'
@@ -147,9 +166,15 @@ export async function getAllProducts(req: Request, res: Response) {
       prisma.product.count({ where })
     ]);
 
+    const transformedProducts = products.map(product => ({
+      ...product,
+      isAssigned: product.assignments.length > 0,
+      currentAssignment: product.assignments[0] || null
+    }));
+
     res.json({
       success: true,
-      data: products,
+      data: transformedProducts,
       pagination: {
         total,
         page: Number(page),
@@ -162,177 +187,194 @@ export async function getAllProducts(req: Request, res: Response) {
   }
 }
 
-export async function getAssignedProducts(req: Request, res: Response) {
-  try {
-    const { 
-      page = 1, 
-      limit = 10, 
-      search = '',
-      categoryId,
-      branchId,
-      departmentId
-    } = req.query;
-    
-    const where: Prisma.ProductWhereInput = {
-      AND: [
-        {
-          OR: [
-            { name: { contains: search as string } },
-            { model: { contains: search as string } }
-          ]
-        },
-        {
-          assignments: {
-            some: {
-              status: 'ASSIGNED',
-              returnedAt: null
-            }
-          }
-        }
-      ],
-      deletedAt: null
-    };
-
-    // Add optional filters
-    if (categoryId) {
-      where.categoryId = parseInt(categoryId as string);
-    }
-    if (branchId) {
-      where.branchId = parseInt(branchId as string);
-    }
-    if (departmentId) {
-      where.departmentId = parseInt(departmentId as string);
-    }
-
-    const [products, total] = await prisma.$transaction([
-      prisma.product.findMany({
-        skip: (Number(page) - 1) * Number(limit),
-        take: Number(limit),
-        where,
-        include: {
-          category: true,
-          branch: true,
-          department: true,
-          assignments: {
-            where: {
-              status: 'ASSIGNED',
-              returnedAt: null
-            },
-            include: {
-              employee: true
-            }
-          }
-        },
-        orderBy: {
-          createdAt: 'desc'
-        }
-      }),
-      prisma.product.count({ where })
-    ]);
-
-    res.json({
-      success: true,
-      data: products,
-      pagination: {
-        total,
-        page: Number(page),
-        limit: Number(limit),
-        totalPages: Math.ceil(total / Number(limit))
-      }
-    });
-  } catch (error) {
-    throw new AppError("Failed to fetch assigned products", 500);
-  }
-}
-
 export async function getProductById(req: Request, res: Response) {
   try {
     const product = await prisma.product.findUnique({
       where: { 
         id: parseInt(req.params.id),
-        deletedAt: null
+        deletedAt: null 
       },
-      include: {
-        category: true,
-        branch: true,
-        department: true,
+      select: {
+        id: true,
+        name: true,
+        model: true,
+        category: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        branch: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        department: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        warrantyDate: true,
+        complianceStatus: true,
+        notes: true,
+        createdAt: true,
+        updatedAt: true,
         assignments: {
-          include: {
-            employee: {
-              include: {
-            
-                branch: true
-              }
-            },
-            assignedBy: true
-          },
           orderBy: {
             assignedAt: 'desc'
+          },
+          select: {
+            id: true,
+            status: true,
+            assignedAt: true,
+            returnedAt: true,
+            condition:true,
+            employee: {
+              select: {
+                id: true,
+                name: true
+              }
+            },
+            assignedBy: {
+              select: {
+                id: true,
+                username: true
+              }
+            }
           }
         }
       }
     });
 
     if (!product) throw new AppError("Product not found", 404);
+    
     res.json({ success: true, data: product });
   } catch (error) {
     throw error;
   }
 }
 
+export async function getAssignedProducts(_req: Request, res: Response) {
+  try {
+    const products = await prisma.product.findMany({
+      where: {
+        deletedAt: null,
+        assignments: {
+          some: {
+            returnedAt: null
+          }
+        }
+      },
+      select: {
+        id: true,
+        name: true,
+        model: true,
+        category: {
+          select: {
+            name: true
+          }
+        },
+        assignments: {
+          where: {
+            returnedAt: null
+          },
+          select: {
+            employee: {
+              select: {
+                name: true
+              }
+            },
+            assignedAt: true
+          }
+        }
+      }
+    });
+
+    res.json({ success: true, data: products });
+  } catch (error) {
+    throw new AppError("Failed to fetch assigned products", 500);
+  }
+}
+
+
+
 export async function updateProduct(req: Request, res: Response) {
   try {
     const { id } = req.params;
-    const { departmentId, ...updateData } = req.body;
+    const { name, model, categoryId, branchId, departmentId, warrantyDate, complianceStatus, notes } = req.body;
 
-    // Check if product exists
-    const existingProduct = await prisma.product.findFirst({
-      where: { id: parseInt(id), deletedAt: null }
+    const product = await prisma.product.findUnique({
+      where: { id: parseInt(id) }
     });
-    if (!existingProduct) {
-      throw new AppError("Product not found", 404);
+    
+    if (!product) throw new AppError("Product not found", 404);
+
+    // Validate references if changed
+    if (categoryId && categoryId !== product.categoryId) {
+      const category = await prisma.category.findFirst({
+        where: { id: categoryId, deletedAt: null }
+      });
+      if (!category) throw new AppError("Category not found", 404);
     }
 
-    // Validate department if provided
-    if (departmentId) {
-      const departmentExists = await prisma.department.findFirst({
+    if (branchId && branchId !== product.branchId) {
+      const branch = await prisma.branch.findFirst({
+        where: { id: branchId, deletedAt: null }
+      });
+      if (!branch) throw new AppError("Branch not found", 404);
+    }
+
+    if (departmentId && departmentId !== product.departmentId) {
+      const department = await prisma.department.findFirst({
         where: { id: departmentId, deletedAt: null }
       });
-      if (!departmentExists) {
-        throw new AppError("Department not found", 404);
-      }
+      if (!department) throw new AppError("Department not found", 404);
     }
 
-    const product = await prisma.product.update({
+    const updatedProduct = await prisma.product.update({
       where: { id: parseInt(id) },
       data: {
-        ...updateData,
-        departmentId: departmentId !== undefined ? departmentId : existingProduct.departmentId,
-        warrantyDate: updateData.warrantyDate ? new Date(updateData.warrantyDate) : existingProduct.warrantyDate
+        name: name || product.name,
+        model: model || product.model,
+        categoryId: categoryId || product.categoryId,
+        branchId: branchId || product.branchId,
+        departmentId: departmentId !== undefined ? departmentId : product.departmentId,
+        warrantyDate: warrantyDate ? new Date(warrantyDate) : product.warrantyDate,
+        complianceStatus: complianceStatus !== undefined ? complianceStatus : product.complianceStatus,
+        notes: notes || product.notes
       },
-      include: {
-        category: true,
-        branch: true,
-        department: true
+      select: {
+        id: true,
+        name: true,
+        model: true,
+        category: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        branch: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        department: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        warrantyDate: true,
+        complianceStatus: true,
+        updatedAt: true
       }
     });
 
-    res.json({ success: true, data: product });
+    res.json({ success: true, data: updatedProduct });
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      if (error.code === 'P2002') {
-        let field = 'field';
-        if (Array.isArray(error.meta?.target)) {
-          field = error.meta.target[0];
-        } else if (typeof error.meta?.target === 'string') {
-          field = error.meta.target;
-        }
-        throw new AppError(`A product with this ${field} already exists`, 400);
-      }
-      if (error.code === 'P2003') {
-        throw new AppError("Invalid reference ID provided", 400);
-      }
-    }
     throw error;
   }
 }
@@ -340,24 +382,24 @@ export async function updateProduct(req: Request, res: Response) {
 export async function deleteProduct(req: Request, res: Response) {
   try {
     const { id } = req.params;
+
+    const product = await prisma.product.findUnique({
+      where: { id: parseInt(id) },
+      include: {
+        _count: {
+          select: {
+            assignments: true
+          }
+        }
+      }
+    });
     
-    // Check if product exists
-    const productExists = await prisma.product.findFirst({
-      where: { id: parseInt(id), deletedAt: null }
-    });
-    if (!productExists) {
-      throw new AppError("Product not found", 404);
-    }
+    if (!product) throw new AppError("Product not found", 404);
 
-    const assignments = await prisma.productAssignment.count({
-      where: { productId: parseInt(id) }
-    });
-
-    if (assignments > 0) {
+    if (product._count.assignments > 0) {
       throw new AppError("Cannot delete product with active assignments", 400);
     }
 
-    // Soft delete
     await prisma.product.update({
       where: { id: parseInt(id) },
       data: { deletedAt: new Date() }
@@ -369,37 +411,40 @@ export async function deleteProduct(req: Request, res: Response) {
   }
 }
 
-export const generateProductQr = async (req: Request, res: Response) => {
+
+
+
+export async function generateProductQr(req: Request, res: Response) {
   try {
     const { id } = req.params;
     
-    if (!id) {
-      throw new AppError('Product ID is required', 400);
+    if (!id || isNaN(parseInt(id))) {
+      throw new Error("Invalid product ID");
     }
 
-    // Check if product exists
-    const productExists = await prisma.product.findFirst({
-      where: { id: parseInt(id), deletedAt: null }
-    });
-    if (!productExists) {
-      throw new AppError("Product not found", 404);
-    }
-
-    const productUrl = `${process.env.FRONTEND_URL}/products/view/${id}`;
+    const productUrl = `${process.env.FRONTEND_URL}/products-view/${id}`;
     
-    const qrCodeData = await QRCode.toDataURL(productUrl, {
-      errorCorrectionLevel: 'H',
-      width: 300,
-      margin: 1
+    // Generate QR code with proper error handling
+    const qrCode = await new Promise<string>((resolve, reject) => {
+      QRCode.toDataURL(productUrl, {
+        errorCorrectionLevel: 'H',
+        width: 300,
+        margin: 1
+      }, (err, url) => {
+        if (err) return reject(err);
+        resolve(url);
+      });
+    });
+    res.json({ 
+      success: true,
+      qrCode // Send the data URL directly
     });
 
-    res.status(200).json({
-      success: true,
-      qrCodeData,
-      productUrl
-    });
   } catch (error) {
-    console.error('QR Generation Error:', error);
-    throw new AppError('Failed to generate QR code', 500);
+    console.error('QR generation error:', error);
+    res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to generate QR code'
+    });
   }
-};
+}

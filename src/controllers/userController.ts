@@ -3,22 +3,47 @@ import { AppError } from "../samples/errorHandler";
 import bcrypt from "bcryptjs";
 import prisma from "../database/db";
 
-
 const BCRYPT_SALT_ROUNDS = 12;
 
-export async function getAllUsers(_req: Request, res: Response) {
+export async function getAllUsers(req: Request, res: Response) {
   try {
-    const users = await prisma.user.findMany({
-      where: { deletedAt: null },
-      select: {
-        id: true,
-        username: true,
-        role: true,
-        createdAt: true,
-        updatedAt: true
+    const { page = 1, limit = 10, search } = req.query;
+    
+    const where: any = { deletedAt: null };
+    
+    if (search) {
+      where.username = { contains: search as string, mode: 'insensitive' };
+    }
+
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        skip: (Number(page) - 1) * Number(limit),
+        take: Number(limit),
+        where,
+        select: {
+          id: true,
+          username: true,
+          role: true,
+          createdAt: true,
+          updatedAt: true
+        },
+        orderBy: {
+          username: 'asc'
+        }
+      }),
+      prisma.user.count({ where })
+    ]);
+
+    res.json({
+      success: true,
+      data: users,
+      pagination: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / Number(limit))
       }
     });
-    res.json({ success: true, data: users });
   } catch (error) {
     throw new AppError("Failed to fetch users", 500);
   }
@@ -26,16 +51,15 @@ export async function getAllUsers(_req: Request, res: Response) {
 
 export async function getCurrentUser(req: Request, res: Response) {
   try {
-    if (!req.user) throw new AppError("User not authenticated", 401);
+    if (!req.user) throw new AppError("Authentication required", 401);
     
     const user = await prisma.user.findUnique({
-      where: { id: (parseInt(req.user.userId)) },
+      where: { id: parseInt(req.user.userId) },
       select: {
         id: true,
         username: true,
         role: true,
-        createdAt: true,
-        updatedAt: true
+        createdAt: true
       }
     });
     
@@ -72,12 +96,12 @@ export async function updateUser(req: Request, res: Response) {
   try {
     const { id } = req.params;
     const { username, password } = req.body;
-    if (!req.user) throw new AppError("User not authenticated", 401);
-    // Ensure users can only update their own profile unless they're admin
-    if (parseInt(req.user?.userId) !== parseInt(id) ){
-      if (req.user?.role !== "ADMIN" && req.user?.role !== "SUPER_ADMIN") {
-        throw new AppError("You can only update your own profile", 403);
-      }
+
+    if (!req.user) throw new AppError("Authentication required", 401);
+
+    // Users can only update their own profile unless they're admin
+    if (parseInt(req.user.userId) !== parseInt(id) && req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+      throw new AppError("You can only update your own profile", 403);
     }
 
     const user = await prisma.user.findUnique({ where: { id: parseInt(id) } });
@@ -85,16 +109,15 @@ export async function updateUser(req: Request, res: Response) {
 
     const updateData: { username?: string; passwordHash?: string } = {};
 
-    if (username) {
-      if (username !== user.username) {
-        const existingUser = await prisma.user.findFirst({
-          where: { username, deletedAt: null }
-        });
-        if (existingUser) {
-          throw new AppError("Username already taken", 409);
+    if (username && username !== user.username) {
+      const existingUser = await prisma.user.findFirst({
+        where: { 
+          username: { equals: username},
+          deletedAt: null 
         }
-        updateData.username = username;
-      }
+      });
+      if (existingUser) throw new AppError("Username already exists", 409);
+      updateData.username = username;
     }
 
     if (password) {
@@ -108,7 +131,6 @@ export async function updateUser(req: Request, res: Response) {
         id: true,
         username: true,
         role: true,
-        createdAt: true,
         updatedAt: true
       }
     });
@@ -124,11 +146,15 @@ export async function updateUserRole(req: Request, res: Response) {
     const { id } = req.params;
     const { role } = req.body;
 
+    if (!req.user || req.user.role !== 'super_admin') {
+      throw new AppError("Only super admin can change roles", 403);
+    }
+
     const user = await prisma.user.findUnique({ where: { id: parseInt(id) } });
     if (!user) throw new AppError("User not found", 404);
 
     // Prevent modifying super admins
-    if (user.role === "SUPER_ADMIN") {
+    if (user.role === 'super_admin') {
       throw new AppError("Cannot modify super admin role", 403);
     }
 
@@ -151,12 +177,16 @@ export async function updateUserRole(req: Request, res: Response) {
 export async function deleteUser(req: Request, res: Response) {
   try {
     const { id } = req.params;
+
+    if (!req.user || req.user.role !== 'super_admin') {
+      throw new AppError("Only super admin can delete users", 403);
+    }
+
     const user = await prisma.user.findUnique({ where: { id: parseInt(id) } });
-    
     if (!user) throw new AppError("User not found", 404);
-    
+
     // Prevent deleting super admins
-    if (user.role === "SUPER_ADMIN") {
+    if (user.role === 'super_admin') {
       throw new AppError("Cannot delete super admin", 403);
     }
 
@@ -181,7 +211,10 @@ export async function checkUsernameAvailability(req: Request, res: Response) {
     }
 
     const existingUser = await prisma.user.findFirst({
-      where: { username, deletedAt: null }
+      where: { 
+        username: { equals: username },
+        deletedAt: null 
+      }
     });
 
     res.json({ available: !existingUser });

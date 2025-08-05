@@ -28,7 +28,7 @@ export function authenticateJWT(
     }
 
     // Type assertion to UserAttributes
-    req.user = decoded as { userId: string; role: string };
+    req.user = decoded as { userId: string; role: string; username: string };
     next();
   });
 }

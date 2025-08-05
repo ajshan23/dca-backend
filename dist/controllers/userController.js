@@ -14,19 +14,41 @@ const errorHandler_1 = require("../samples/errorHandler");
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const db_1 = __importDefault(require("../database/db"));
 const BCRYPT_SALT_ROUNDS = 12;
-async function getAllUsers(_req, res) {
+async function getAllUsers(req, res) {
     try {
-        const users = await db_1.default.user.findMany({
-            where: { deletedAt: null },
-            select: {
-                id: true,
-                username: true,
-                role: true,
-                createdAt: true,
-                updatedAt: true
+        const { page = 1, limit = 10, search } = req.query;
+        const where = { deletedAt: null };
+        if (search) {
+            where.username = { contains: search, mode: 'insensitive' };
+        }
+        const [users, total] = await Promise.all([
+            db_1.default.user.findMany({
+                skip: (Number(page) - 1) * Number(limit),
+                take: Number(limit),
+                where,
+                select: {
+                    id: true,
+                    username: true,
+                    role: true,
+                    createdAt: true,
+                    updatedAt: true
+                },
+                orderBy: {
+                    username: 'asc'
+                }
+            }),
+            db_1.default.user.count({ where })
+        ]);
+        res.json({
+            success: true,
+            data: users,
+            pagination: {
+                total,
+                page: Number(page),
+                limit: Number(limit),
+                totalPages: Math.ceil(total / Number(limit))
             }
         });
-        res.json({ success: true, data: users });
     }
     catch (error) {
         throw new errorHandler_1.AppError("Failed to fetch users", 500);
@@ -35,15 +57,14 @@ async function getAllUsers(_req, res) {
 async function getCurrentUser(req, res) {
     try {
         if (!req.user)
-            throw new errorHandler_1.AppError("User not authenticated", 401);
+            throw new errorHandler_1.AppError("Authentication required", 401);
         const user = await db_1.default.user.findUnique({
-            where: { id: (parseInt(req.user.userId)) },
+            where: { id: parseInt(req.user.userId) },
             select: {
                 id: true,
                 username: true,
                 role: true,
-                createdAt: true,
-                updatedAt: true
+                createdAt: true
             }
         });
         if (!user)
@@ -79,27 +100,25 @@ async function updateUser(req, res) {
         const { id } = req.params;
         const { username, password } = req.body;
         if (!req.user)
-            throw new errorHandler_1.AppError("User not authenticated", 401);
-        // Ensure users can only update their own profile unless they're admin
-        if (parseInt(req.user?.userId) !== parseInt(id)) {
-            if (req.user?.role !== "ADMIN" && req.user?.role !== "SUPER_ADMIN") {
-                throw new errorHandler_1.AppError("You can only update your own profile", 403);
-            }
+            throw new errorHandler_1.AppError("Authentication required", 401);
+        // Users can only update their own profile unless they're admin
+        if (parseInt(req.user.userId) !== parseInt(id) && req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+            throw new errorHandler_1.AppError("You can only update your own profile", 403);
         }
         const user = await db_1.default.user.findUnique({ where: { id: parseInt(id) } });
         if (!user)
             throw new errorHandler_1.AppError("User not found", 404);
         const updateData = {};
-        if (username) {
-            if (username !== user.username) {
-                const existingUser = await db_1.default.user.findFirst({
-                    where: { username, deletedAt: null }
-                });
-                if (existingUser) {
-                    throw new errorHandler_1.AppError("Username already taken", 409);
+        if (username && username !== user.username) {
+            const existingUser = await db_1.default.user.findFirst({
+                where: {
+                    username: { equals: username },
+                    deletedAt: null
                 }
-                updateData.username = username;
-            }
+            });
+            if (existingUser)
+                throw new errorHandler_1.AppError("Username already exists", 409);
+            updateData.username = username;
         }
         if (password) {
             updateData.passwordHash = await bcryptjs_1.default.hash(password, BCRYPT_SALT_ROUNDS);
@@ -111,7 +130,6 @@ async function updateUser(req, res) {
                 id: true,
                 username: true,
                 role: true,
-                createdAt: true,
                 updatedAt: true
             }
         });
@@ -125,11 +143,14 @@ async function updateUserRole(req, res) {
     try {
         const { id } = req.params;
         const { role } = req.body;
+        if (!req.user || req.user.role !== 'super_admin') {
+            throw new errorHandler_1.AppError("Only super admin can change roles", 403);
+        }
         const user = await db_1.default.user.findUnique({ where: { id: parseInt(id) } });
         if (!user)
             throw new errorHandler_1.AppError("User not found", 404);
         // Prevent modifying super admins
-        if (user.role === "SUPER_ADMIN") {
+        if (user.role === 'super_admin') {
             throw new errorHandler_1.AppError("Cannot modify super admin role", 403);
         }
         const updatedUser = await db_1.default.user.update({
@@ -150,11 +171,14 @@ async function updateUserRole(req, res) {
 async function deleteUser(req, res) {
     try {
         const { id } = req.params;
+        if (!req.user || req.user.role !== 'super_admin') {
+            throw new errorHandler_1.AppError("Only super admin can delete users", 403);
+        }
         const user = await db_1.default.user.findUnique({ where: { id: parseInt(id) } });
         if (!user)
             throw new errorHandler_1.AppError("User not found", 404);
         // Prevent deleting super admins
-        if (user.role === "SUPER_ADMIN") {
+        if (user.role === 'super_admin') {
             throw new errorHandler_1.AppError("Cannot delete super admin", 403);
         }
         // Soft delete
@@ -175,7 +199,10 @@ async function checkUsernameAvailability(req, res) {
             throw new errorHandler_1.AppError("Username is required", 400);
         }
         const existingUser = await db_1.default.user.findFirst({
-            where: { username, deletedAt: null }
+            where: {
+                username: { equals: username },
+                deletedAt: null
+            }
         });
         res.json({ available: !existingUser });
     }

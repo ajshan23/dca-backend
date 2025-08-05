@@ -1,21 +1,19 @@
-// schema.prisma
 datasource db {
-  provider = "sqlserver"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
 generator client {
   provider = "prisma-client-js"
-  previewFeatures = ["microsoftSqlServer"]
 }
 
 model User {
-  id             Int               @id @default(autoincrement())
-  username       String            @unique
+  id             Int       @id @default(autoincrement())
+  username       String    @unique
   passwordHash   String
-  role           String            @default("USER")
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
+  role           String    @default("USER")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
   assignments    ProductAssignment[]
 
@@ -47,58 +45,20 @@ model Category {
 }
 
 model Employee {
-  id           Int               @id @default(autoincrement())
-  empId        String            @unique
+  id           Int       @id @default(autoincrement())
+  empId        String    @unique
   name         String
   email        String?
   department   String?
   position     String?
   branchId     Int?
-  branch       Branch?           @relation(fields: [branchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
+  branch       Branch?   @relation(fields: [branchId], references: [id])
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
   deletedAt    DateTime?
   assignments  ProductAssignment[]
 
   @@map("employees")
-}
-
-model Product {
-  id             Int               @id @default(autoincrement())
-  name           String
-  model          String
-  categoryId     Int
-  category       Category          @relation(fields: [categoryId], references: [id])
-  branchId       Int
-  branch         Branch            @relation(fields: [branchId], references: [id])
-  departmentId   Int?
-  department     Department?       @relation(fields: [departmentId], references: [id])
-  warrantyDate   DateTime?
-  complianceStatus Boolean          @default(false)
-  notes          String?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-  deletedAt      DateTime?
-  assignments    ProductAssignment[]
-
-  @@map("products")
-}
-model ProductAssignment {
-  id               Int             @id @default(autoincrement())
-  productId        Int
-  product          Product         @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  employeeId       Int
-  employee         Employee        @relation(fields: [employeeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  assignedById     Int
-  assignedBy       User            @relation(fields: [assignedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  assignedAt       DateTime        @default(now())
-  returnedAt       DateTime?
-  expectedReturnAt DateTime?
-  status           String          @default("ASSIGNED")
-  condition        String?
-  notes            String?
-  deletedAt        DateTime?       @map("deleted_at")  
-  @@map("product_assignments")
 }
 
 model Department {
@@ -111,4 +71,47 @@ model Department {
   products    Product[]
 
   @@map("departments")
+}
+
+model Product {
+  id               Int       @id @default(autoincrement())
+  name             String
+  model            String
+  categoryId       Int
+  category         Category  @relation(fields: [categoryId], references: [id])
+  branchId         Int
+  branch           Branch    @relation(fields: [branchId], references: [id])
+  departmentId     Int?
+  department       Department? @relation(fields: [departmentId], references: [id])
+  warrantyDate     DateTime?
+  complianceStatus Boolean   @default(false)
+  notes            String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+  assignments      ProductAssignment[]
+
+  @@map("products")
+}
+
+model ProductAssignment {
+  id               Int       @id @default(autoincrement())
+  productId        Int
+  product          Product   @relation(fields: [productId], references: [id])
+  employeeId       Int
+  employee         Employee  @relation(fields: [employeeId], references: [id])
+  assignedById     Int
+  assignedBy       User      @relation(fields: [assignedById], references: [id])
+  assignedAt       DateTime  @default(now())
+  returnedAt       DateTime?
+  expectedReturnAt DateTime?
+  status           String    @default("ASSIGNED")
+  condition        String?
+  notes            String?
+  deletedAt        DateTime?
+
+  // Ensure only one active assignment per product
+  @@unique([productId, returnedAt])
+
+  @@map("product_assignments")
 }
